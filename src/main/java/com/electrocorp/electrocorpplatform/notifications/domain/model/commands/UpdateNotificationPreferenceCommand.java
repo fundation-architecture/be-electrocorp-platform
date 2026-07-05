@@ -27,6 +27,7 @@ public record UpdateNotificationPreferenceCommand(
         Boolean systemRecommendations,
         Boolean dailySummaryEnabled,
         Boolean weeklySummaryEnabled,
+        Boolean monthlyReportEnabled,
         String defaultDeliveryMode
 ) {
 }

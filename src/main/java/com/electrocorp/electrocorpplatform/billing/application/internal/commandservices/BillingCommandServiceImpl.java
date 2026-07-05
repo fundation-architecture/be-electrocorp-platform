@@ -1,6 +1,8 @@
 package com.electrocorp.electrocorpplatform.billing.application.internal.commandservices;
 
 import com.electrocorp.electrocorpplatform.billing.application.commandservices.BillingCommandService;
+import com.electrocorp.electrocorpplatform.billing.application.gateways.PaymentGatewayChargeRequest;
+import com.electrocorp.electrocorpplatform.billing.application.gateways.PaymentGatewayPort;
 import com.electrocorp.electrocorpplatform.billing.domain.model.aggregates.Invoice;
 import com.electrocorp.electrocorpplatform.billing.domain.model.aggregates.Payment;
 import com.electrocorp.electrocorpplatform.billing.domain.model.aggregates.Plan;
@@ -31,6 +33,7 @@ public class BillingCommandServiceImpl implements BillingCommandService {
     private final PaymentRepository paymentRepository;
     private final InvoiceRepository invoiceRepository;
     private final PaymentValidationService paymentValidationService;
+    private final PaymentGatewayPort paymentGatewayPort;
     private final DomainEventPublisher domainEventPublisher;
 
     @Override
@@ -40,6 +43,19 @@ public class BillingCommandServiceImpl implements BillingCommandService {
 
         Plan plan = planRepository.findByCode(command.planCode())
                 .orElseThrow(() -> new IllegalArgumentException("Plan not found."));
+
+        var chargeResult = paymentGatewayPort.charge(new PaymentGatewayChargeRequest(
+                command.userId(),
+                plan.getCode(),
+                plan.getMonthlyPrice(),
+                command.holderName(),
+                command.cardNumber(),
+                command.expirationDate()
+        ));
+
+        if (!chargeResult.approved()) {
+            throw new IllegalArgumentException("Payment gateway rejected the charge.");
+        }
 
         subscriptionRepository
                 .findFirstByUserIdAndStatus(command.userId(), SubscriptionStatus.ACTIVE)
@@ -55,6 +71,12 @@ public class BillingCommandServiceImpl implements BillingCommandService {
         Payment payment = paymentRepository.save(
                 new Payment(new ProcessPaymentCommand(command.userId(), subscription.getId()), subscription)
         );
+        payment.registerGatewayResult(
+                chargeResult.provider(),
+                chargeResult.transactionId(),
+                chargeResult.statusMessage()
+        );
+        payment = paymentRepository.save(payment);
 
         invoiceRepository.save(new Invoice(payment));
         domainEventPublisher.publish(new SubscriptionActivatedEvent(

@@ -39,6 +39,12 @@ public class Payment extends AuditableEntity {
     @Column(length = 50)
     private String paymentMethod;
 
+    @Column(length = 120)
+    private String gatewayTransactionId;
+
+    @Column(length = 240)
+    private String gatewayStatusMessage;
+
     private LocalDateTime paidAt;
 
     public Payment(ProcessPaymentCommand command, Subscription subscription) {
@@ -64,5 +70,22 @@ public class Payment extends AuditableEntity {
         this.status = PaymentStatus.APPROVED;
         this.paymentMethod = "CARD";
         this.paidAt = LocalDateTime.now();
+    }
+
+    public void registerGatewayResult(String provider, String transactionId, String statusMessage) {
+        if (provider != null && !provider.isBlank()) {
+            this.paymentMethod = provider.trim();
+        }
+        this.gatewayTransactionId = normalizeNullable(transactionId, 120);
+        this.gatewayStatusMessage = normalizeNullable(statusMessage, 240);
+    }
+
+    private String normalizeNullable(String value, int maxLength) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+
+        String normalized = value.trim();
+        return normalized.length() <= maxLength ? normalized : normalized.substring(0, maxLength);
     }
 }

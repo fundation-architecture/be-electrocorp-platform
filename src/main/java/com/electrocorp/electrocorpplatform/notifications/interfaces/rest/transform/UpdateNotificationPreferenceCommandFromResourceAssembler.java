@@ -32,6 +32,7 @@ public class UpdateNotificationPreferenceCommandFromResourceAssembler {
                 resource.systemRecommendations(),
                 resource.dailySummaryEnabled(),
                 resource.weeklySummaryEnabled(),
+                resource.monthlyReportEnabled(),
                 resource.defaultDeliveryMode()
         );
     }
