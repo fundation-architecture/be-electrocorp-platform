@@ -7,10 +7,12 @@ import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.command
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.factories.EnergyReadingFactory;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.aggregates.EnergyReading;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.EnergyReadingStatus;
+import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.events.EnergyThresholdExceededEvent;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.repositories.EnergyReadingRepository;
 import com.electrocorp.electrocorpplatform.energymonitoring.interfaces.rest.resources.EnergyDashboardSummaryResource;
 import com.electrocorp.electrocorpplatform.notifications.domain.model.aggregates.Alert;
 import com.electrocorp.electrocorpplatform.notifications.domain.repositories.AlertRepository;
+import com.electrocorp.electrocorpplatform.shared.application.events.DomainEventPublisher;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,6 +46,7 @@ public class EnergyMonitoringApplicationService {
     private final AlertRepository alertRepository;
     private final EnergyReadingRecorderService energyReadingRecorderService;
     private final EnergySamplingSettingsService energySamplingSettingsService;
+    private final DomainEventPublisher domainEventPublisher;
 
     @Transactional
     public List<EnergyReading> getReadings(Long userId) {
@@ -150,7 +153,19 @@ public class EnergyMonitoringApplicationService {
                 0,
                 LocalDateTime.now()
         );
-        return energyReadingRepository.save(reading);
+        EnergyReading savedReading = energyReadingRepository.save(reading);
+        publishThresholdExceededIfNeeded(savedReading);
+        return savedReading;
+    }
+
+    private void publishThresholdExceededIfNeeded(EnergyReading reading) {
+        if (reading != null && reading.getStatus() == EnergyReadingStatus.HIGH) {
+            domainEventPublisher.publish(new EnergyThresholdExceededEvent(
+                    reading.getUserId(),
+                    reading.getDeviceId(),
+                    reading.getWatts()
+            ));
+        }
     }
 
     private BigDecimal calculateAverageWatts(List<EnergyReading> readings) {

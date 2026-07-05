@@ -1,5 +1,6 @@
 package com.electrocorp.electrocorpplatform.iam.infrastructure.security;
 
+import com.electrocorp.electrocorpplatform.iam.application.security.TokenService;
 import com.electrocorp.electrocorpplatform.iam.domain.model.aggregates.User;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -14,7 +15,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @Service
-public class JwtTokenService {
+public class JwtTokenService implements TokenService {
 
     private static final String HMAC_ALGORITHM = "HmacSHA256";
     private static final Base64.Encoder BASE64_URL_ENCODER = Base64.getUrlEncoder().withoutPadding();
@@ -33,6 +34,7 @@ public class JwtTokenService {
         this.expirationSeconds = expirationSeconds;
     }
 
+    @Override
     public String generateToken(User user) {
         try {
             String header = encode("{\"alg\":\"HS256\",\"typ\":\"JWT\"}");
@@ -53,6 +55,7 @@ public class JwtTokenService {
         }
     }
 
+    @Override
     public Optional<Long> validateAndGetUserId(String token) {
         try {
             String[] parts = token.split("\\.");

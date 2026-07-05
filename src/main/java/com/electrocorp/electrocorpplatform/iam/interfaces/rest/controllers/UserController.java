@@ -1,6 +1,7 @@
 package com.electrocorp.electrocorpplatform.iam.interfaces.rest.controllers;
 
-import com.electrocorp.electrocorpplatform.iam.application.services.UserApplicationService;
+import com.electrocorp.electrocorpplatform.iam.application.commandservices.UserCommandService;
+import com.electrocorp.electrocorpplatform.iam.application.queryservices.UserQueryService;
 import com.electrocorp.electrocorpplatform.iam.interfaces.rest.resources.UpdateProfileResource;
 import com.electrocorp.electrocorpplatform.iam.interfaces.rest.resources.UserResource;
 import com.electrocorp.electrocorpplatform.iam.interfaces.rest.transform.UpdateProfileCommandFromResourceAssembler;
@@ -15,20 +16,21 @@ import org.springframework.web.bind.annotation.*;
 @RequiredArgsConstructor
 public class UserController {
 
-    private final UserApplicationService userApplicationService;
+    private final UserCommandService userCommandService;
+    private final UserQueryService userQueryService;
     private final CurrentUserProvider currentUserProvider;
 
     @GetMapping("/me")
     public UserResource getCurrentUserProfile() {
         return UserResourceFromEntityAssembler.toResourceFromEntity(
-                userApplicationService.getProfile(currentUserProvider.getCurrentUserId())
+                userQueryService.getProfile(currentUserProvider.getCurrentUserId())
         );
     }
 
     @PutMapping("/me")
     public UserResource updateCurrentUserProfile(@Valid @RequestBody UpdateProfileResource request) {
         return UserResourceFromEntityAssembler.toResourceFromEntity(
-                userApplicationService.updateProfile(
+                userCommandService.updateProfile(
                         currentUserProvider.getCurrentUserId(),
                         UpdateProfileCommandFromResourceAssembler.toCommandFromResource(request)
                 )
@@ -37,18 +39,18 @@ public class UserController {
 
     @DeleteMapping("/me")
     public void deleteCurrentUserAccount() {
-        userApplicationService.deleteAccount(currentUserProvider.getCurrentUserId());
+        userCommandService.deleteAccount(currentUserProvider.getCurrentUserId());
     }
 
     @GetMapping("/{userId}/profile")
     public UserResource getProfile(@PathVariable Long userId) {
-        return UserResourceFromEntityAssembler.toResourceFromEntity(userApplicationService.getProfile(userId));
+        return UserResourceFromEntityAssembler.toResourceFromEntity(userQueryService.getProfile(userId));
     }
 
     @PutMapping("/{userId}/profile")
     public UserResource updateProfile(@PathVariable Long userId, @Valid @RequestBody UpdateProfileResource request) {
         return UserResourceFromEntityAssembler.toResourceFromEntity(
-                userApplicationService.updateProfile(
+                userCommandService.updateProfile(
                         userId,
                         UpdateProfileCommandFromResourceAssembler.toCommandFromResource(request)
                 )
@@ -57,6 +59,6 @@ public class UserController {
 
     @DeleteMapping("/{userId}")
     public void deleteAccount(@PathVariable Long userId) {
-        userApplicationService.deleteAccount(userId);
+        userCommandService.deleteAccount(userId);
     }
 }

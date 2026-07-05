@@ -1,6 +1,7 @@
 package com.electrocorp.electrocorpplatform.shared.interfaces.rest.errors;
 
 import com.electrocorp.electrocorpplatform.shared.interfaces.rest.resources.ErrorResource;
+import com.electrocorp.electrocorpplatform.shared.application.result.ApplicationError;
 import com.electrocorp.electrocorpplatform.shared.domain.exceptions.BusinessRuleException;
 import com.electrocorp.electrocorpplatform.shared.domain.exceptions.BusinessRuleValidationException;
 import com.electrocorp.electrocorpplatform.shared.domain.exceptions.ConflictException;
@@ -11,8 +12,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.context.MessageSource;
 import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.web.bind.annotation.*;
-
-import java.time.LocalDateTime;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -26,13 +25,13 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.NOT_FOUND)
     @ExceptionHandler(ResourceNotFoundException.class)
     public ErrorResource handleResourceNotFoundException(ResourceNotFoundException exception) {
-        return error("RESOURCE_NOT_FOUND", exception.getMessage());
+        return error(ApplicationError.notFound(exception.getMessage()));
     }
 
     @ResponseStatus(HttpStatus.CONFLICT)
     @ExceptionHandler(ConflictException.class)
     public ErrorResource handleConflictException(ConflictException exception) {
-        return error("CONFLICT", exception.getMessage());
+        return error(ApplicationError.conflict(exception.getMessage()));
     }
 
     @ResponseStatus(HttpStatus.UNPROCESSABLE_ENTITY)
@@ -43,26 +42,24 @@ public class GlobalExceptionHandler {
             DomainException.class
     })
     public ErrorResource handleDomainException(RuntimeException exception) {
-        return error("DOMAIN_RULE_VIOLATION", exception.getMessage());
+        return error(ApplicationError.businessRuleViolation(exception.getMessage()));
     }
 
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     @ExceptionHandler(IllegalArgumentException.class)
     public ErrorResource handleIllegalArgumentException(IllegalArgumentException exception) {
-        return error("BAD_REQUEST", exception.getMessage());
+        return error(ApplicationError.badRequest(exception.getMessage()));
     }
 
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     @ExceptionHandler(Exception.class)
     public ErrorResource handleGeneralException(Exception exception) {
-        return error("INTERNAL_SERVER_ERROR", exception.getMessage());
+        return error(ApplicationError.unexpected(exception.getMessage()));
     }
 
-    private ErrorResource error(String code, String message) {
-        return new ErrorResource(
-                code,
-                resolveMessage(message),
-                LocalDateTime.now()
+    private ErrorResource error(ApplicationError error) {
+        return ErrorResponseAssembler.toResourceFromError(
+                new ApplicationError(error.code(), resolveMessage(error.message()))
         );
     }
 

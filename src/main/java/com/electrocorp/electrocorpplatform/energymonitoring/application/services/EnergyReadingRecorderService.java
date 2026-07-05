@@ -4,12 +4,13 @@ import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.aggregates
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.DeviceStatus;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.factories.EnergyReadingFactory;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.EnergyDeviceUsageState;
+import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.EnergyReadingStatus;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.aggregates.EnergyReading;
+import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.events.EnergyThresholdExceededEvent;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.repositories.EnergyDeviceUsageStateRepository;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.repositories.EnergyReadingRepository;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.services.EnergyConsumptionSimulatorService;
-import com.electrocorp.electrocorpplatform.notifications.application.services.NotificationApplicationService;
-import com.electrocorp.electrocorpplatform.notifications.domain.model.valueobjects.RuleScopeType;
+import com.electrocorp.electrocorpplatform.shared.application.events.DomainEventPublisher;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -31,7 +32,7 @@ public class EnergyReadingRecorderService {
     private final EnergyDeviceUsageStateRepository usageStateRepository;
     private final EnergyReadingRepository energyReadingRepository;
     private final EnergyConsumptionSimulatorService simulatorService;
-    private final NotificationApplicationService notificationApplicationService;
+    private final DomainEventPublisher domainEventPublisher;
 
     @Transactional
     public void recordStatusTransition(Device device, DeviceStatus previousStatus) {
@@ -164,7 +165,7 @@ public class EnergyReadingRecorderService {
             );
 
             savedReading = energyReadingRepository.save(reading);
-            publishRuleEvaluation(device, savedReading);
+            publishThresholdExceededIfNeeded(savedReading);
             remainingSeconds -= sampleSeconds;
         }
 
@@ -197,18 +198,16 @@ public class EnergyReadingRecorderService {
                 .setScale(6, RoundingMode.HALF_UP);
     }
 
-    private void publishRuleEvaluation(Device device, EnergyReading reading) {
-        if (reading == null || reading.getWatts() == null) {
+    private void publishThresholdExceededIfNeeded(EnergyReading reading) {
+        if (reading == null || reading.getWatts() == null || reading.getStatus() != EnergyReadingStatus.HIGH) {
             return;
         }
 
-        notificationApplicationService.createAlertFromRuleEvaluation(
-                device.getUserId(),
-                RuleScopeType.DEVICE,
-                String.valueOf(device.getId()),
-                reading.getWatts(),
-                device.getName()
-        );
+        domainEventPublisher.publish(new EnergyThresholdExceededEvent(
+                reading.getUserId(),
+                reading.getDeviceId(),
+                reading.getWatts()
+        ));
     }
 
 }
