@@ -4,8 +4,10 @@ import com.electrocorp.electrocorpplatform.reporting.application.queryservices.R
 import com.electrocorp.electrocorpplatform.reporting.application.services.ReportingApplicationService;
 import com.electrocorp.electrocorpplatform.reporting.domain.model.aggregates.ConsumptionReport;
 import com.electrocorp.electrocorpplatform.reporting.domain.model.aggregates.EnergyGoal;
+import com.electrocorp.electrocorpplatform.reporting.domain.model.aggregates.ReportingEvent;
 import com.electrocorp.electrocorpplatform.reporting.domain.model.queries.GetConsumptionReportsByUserQuery;
 import com.electrocorp.electrocorpplatform.reporting.domain.model.queries.GetEnergyGoalsByUserQuery;
+import com.electrocorp.electrocorpplatform.reporting.domain.model.queries.GetReportingEventsByUserQuery;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -24,5 +26,10 @@ public class ReportingQueryServiceImpl implements ReportingQueryService {
     @Override
     public List<EnergyGoal> handle(GetEnergyGoalsByUserQuery query) {
         return applicationService.getGoals(query.userId());
+    }
+
+    @Override
+    public List<ReportingEvent> handle(GetReportingEventsByUserQuery query) {
+        return applicationService.getEvents(query.userId());
     }
 }

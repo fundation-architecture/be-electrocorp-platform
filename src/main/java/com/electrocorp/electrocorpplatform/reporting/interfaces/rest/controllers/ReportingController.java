@@ -4,11 +4,13 @@ import com.electrocorp.electrocorpplatform.reporting.application.commandservices
 import com.electrocorp.electrocorpplatform.reporting.application.queryservices.ReportingQueryService;
 import com.electrocorp.electrocorpplatform.reporting.domain.model.queries.GetConsumptionReportsByUserQuery;
 import com.electrocorp.electrocorpplatform.reporting.domain.model.queries.GetEnergyGoalsByUserQuery;
+import com.electrocorp.electrocorpplatform.reporting.domain.model.queries.GetReportingEventsByUserQuery;
 import com.electrocorp.electrocorpplatform.reporting.interfaces.rest.resources.*;
 import com.electrocorp.electrocorpplatform.reporting.interfaces.rest.transform.ConsumptionReportResourceFromEntityAssembler;
 import com.electrocorp.electrocorpplatform.reporting.interfaces.rest.transform.CreateConsumptionReportCommandFromResourceAssembler;
 import com.electrocorp.electrocorpplatform.reporting.interfaces.rest.transform.CreateEnergyGoalCommandFromResourceAssembler;
 import com.electrocorp.electrocorpplatform.reporting.interfaces.rest.transform.EnergyGoalResourceFromEntityAssembler;
+import com.electrocorp.electrocorpplatform.reporting.interfaces.rest.transform.ReportingEventResourceFromEntityAssembler;
 import com.electrocorp.electrocorpplatform.reporting.interfaces.rest.transform.UpdateEnergyGoalCommandFromResourceAssembler;
 import com.electrocorp.electrocorpplatform.shared.infrastructure.security.CurrentUserProvider;
 import jakarta.validation.Valid;
@@ -31,6 +33,14 @@ public class ReportingController {
         return queryService.handle(new GetConsumptionReportsByUserQuery(currentUserProvider.getCurrentUserId()))
                 .stream()
                 .map(ConsumptionReportResourceFromEntityAssembler::toResourceFromEntity)
+                .toList();
+    }
+
+    @GetMapping("/activity")
+    public List<ReportingEventResource> getActivity() {
+        return queryService.handle(new GetReportingEventsByUserQuery(currentUserProvider.getCurrentUserId()))
+                .stream()
+                .map(ReportingEventResourceFromEntityAssembler::toResourceFromEntity)
                 .toList();
     }
 
