@@ -12,7 +12,9 @@ import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.entities.D
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.DeviceStatus;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.OperationModeStatus;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.RoutineAction;
+import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.RoutineRepeatType;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.aggregates.Routine;
+import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.events.DeviceCreatedEvent;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.events.OperationModeActivatedEvent;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.repositories.DeviceGroupDeviceRepository;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.repositories.DeviceGroupRepository;
@@ -20,6 +22,9 @@ import com.electrocorp.electrocorpplatform.devicecontrol.domain.repositories.Dev
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.repositories.OperationModeRepository;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.repositories.RoutineRepository;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.RoutineTargetType;
+import com.electrocorp.electrocorpplatform.devicecontrol.domain.services.DevicePairingCatalogService;
+import com.electrocorp.electrocorpplatform.devicecontrol.domain.services.DevicePolicyService;
+import com.electrocorp.electrocorpplatform.devicecontrol.domain.services.RoutineSchedulePolicyService;
 import com.electrocorp.electrocorpplatform.energymonitoring.application.services.EnergyReadingRecorderService;
 import com.electrocorp.electrocorpplatform.notifications.domain.repositories.AlertRuleProfileRepository;
 import com.electrocorp.electrocorpplatform.notifications.domain.repositories.NotificationPreferenceRepository;
@@ -36,6 +41,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -61,6 +67,9 @@ public class DeviceControlApplicationService {
     private final AlertRuleProfileRepository alertRuleProfileRepository;
     private final NotificationPreferenceRepository notificationPreferenceRepository;
     private final DomainEventPublisher domainEventPublisher;
+    private final DevicePairingCatalogService devicePairingCatalogService;
+    private final DevicePolicyService devicePolicyService;
+    private final RoutineSchedulePolicyService routineSchedulePolicyService;
 
     @Transactional(readOnly = true)
     public List<Device> getDevices(Long userId) {
@@ -242,13 +251,76 @@ public class DeviceControlApplicationService {
 
     @Transactional
     public Device createDevice(CreateDeviceCommand command) {
+        return registerDevice(
+                command.userId(),
+                command.name(),
+                command.room(),
+                command.type(),
+                command.powerWatts()
+        );
+    }
+
+    @Transactional
+    public Device pairDevice(PairDeviceCommand command) {
+        if (command.userId() == null) {
+            throw new IllegalArgumentException("User id is required.");
+        }
+
+        var template = devicePairingCatalogService.resolve(command.pairingCode());
+        String alias = command.alias() == null ? "" : command.alias().trim();
+        String deviceName = alias.isBlank() ? template.defaultName() : alias;
+
+        return registerDevice(
+                command.userId(),
+                deviceName,
+                command.room(),
+                template.type(),
+                template.powerWatts()
+        );
+    }
+
+    private Device registerDevice(
+            Long userId,
+            String name,
+            String room,
+            String type,
+            BigDecimal powerWatts
+    ) {
+        devicePolicyService.validateDeviceData(name, type, powerWatts);
+
         Device device = new Device();
-        device.setUserId(command.userId());
-        device.setName(command.name());
-        device.setRoom(command.room() != null ? command.room().trim() : "");
-        device.setType(command.type());
-        device.setPowerWatts(command.powerWatts());
+        device.setUserId(userId);
+        device.setName(name.trim());
+        device.setRoom(room != null ? room.trim() : "");
+        device.setType(type.trim());
+        device.setPowerWatts(powerWatts);
         device.setStatus(DeviceStatus.OFF);
+
+        Device savedDevice = deviceRepository.save(device);
+        domainEventPublisher.publish(new DeviceCreatedEvent(
+                userId,
+                savedDevice.getId(),
+                savedDevice.getName()
+        ));
+
+        return savedDevice;
+    }
+
+    @Transactional
+    public Device updateDevice(UpdateDeviceCommand command) {
+        devicePolicyService.validateDeviceData(command.name(), command.type(), command.powerWatts());
+
+        Device device = deviceRepository.findByIdAndUserId(command.deviceId(), command.userId())
+                .orElseThrow(() -> new IllegalArgumentException("Device not found."));
+
+        if (device.isRemoved()) {
+            throw new IllegalArgumentException("Removed device cannot be updated.");
+        }
+
+        device.setName(command.name().trim());
+        device.setRoom(command.room() != null ? command.room().trim() : "");
+        device.setType(command.type().trim());
+        device.setPowerWatts(command.powerWatts());
 
         return deviceRepository.save(device);
     }
@@ -336,9 +408,16 @@ public class DeviceControlApplicationService {
             throw new IllegalArgumentException("Routine action is required.");
         }
 
-        if (command.time() == null || command.time().trim().isEmpty()) {
-            throw new IllegalArgumentException("Routine time is required.");
-        }
+        String routineTime = command.time() != null ? command.time().trim() : "";
+        RoutineRepeatType repeatType = command.repeatType() != null ? command.repeatType() : RoutineRepeatType.DAILY;
+
+        routineSchedulePolicyService.validateSchedule(
+                routineTime,
+                repeatType,
+                command.daysOfWeek(),
+                command.intervalDays(),
+                command.startsOn()
+        );
 
         RoutineTargetType targetType = command.targetType() != null
                 ? command.targetType()
@@ -364,10 +443,14 @@ public class DeviceControlApplicationService {
         routine.setGroupId(targetType == RoutineTargetType.GROUP ? targetId : null);
         routine.setName(command.name().trim());
         routine.setAction(command.action());
-        routine.setTime(command.time());
-        routine.setRepeatType(command.repeatType() != null ? command.repeatType() : com.electrocorp.electrocorpplatform.devicecontrol.domain.model.RoutineRepeatType.DAILY);
-        routine.setDaysOfWeek(command.daysOfWeek() != null ? command.daysOfWeek().trim() : "");
-        routine.setIntervalDays(command.intervalDays() != null && command.intervalDays() > 0 ? command.intervalDays() : 1);
+        routine.setTime(routineTime);
+        routine.setRepeatType(repeatType);
+        routine.setDaysOfWeek(repeatType == RoutineRepeatType.WEEKLY && command.daysOfWeek() != null
+                ? command.daysOfWeek().trim()
+                : "");
+        routine.setIntervalDays(repeatType == RoutineRepeatType.CUSTOM_INTERVAL
+                ? command.intervalDays()
+                : 1);
         routine.setStartsOn(command.startsOn() != null ? command.startsOn().trim() : null);
         routine.setEnabled(true);
 
@@ -398,6 +481,15 @@ public class DeviceControlApplicationService {
 
     @Transactional
     public RoutineDetails executeRoutine(Long userId, Long routineId) {
+        return executeRoutineInternal(userId, routineId, LocalDateTime.now());
+    }
+
+    @Transactional
+    public RoutineDetails executeScheduledRoutine(Long userId, Long routineId, LocalDateTime executedAt) {
+        return executeRoutineInternal(userId, routineId, executedAt != null ? executedAt : LocalDateTime.now());
+    }
+
+    private RoutineDetails executeRoutineInternal(Long userId, Long routineId, LocalDateTime executedAt) {
         Routine routine = routineRepository.findByIdAndUserId(routineId, userId)
                 .orElseThrow(() -> new IllegalArgumentException("Routine not found."));
 
@@ -427,7 +519,10 @@ public class DeviceControlApplicationService {
             energyReadingRecorderService.recordStatusTransition(savedDevice, previousStatus);
         });
 
-        return toRoutineDetails(routine);
+        routine.markExecutedAt(executedAt);
+        Routine savedRoutine = routineRepository.save(routine);
+
+        return toRoutineDetails(savedRoutine);
     }
 
     @Transactional

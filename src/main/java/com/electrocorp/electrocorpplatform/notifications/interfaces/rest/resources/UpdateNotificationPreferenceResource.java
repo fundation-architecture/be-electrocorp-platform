@@ -28,6 +28,7 @@ public record UpdateNotificationPreferenceResource(
         Boolean systemRecommendations,
         Boolean dailySummaryEnabled,
         Boolean weeklySummaryEnabled,
+        Boolean monthlyReportEnabled,
         String defaultDeliveryMode
 ) {
 }

@@ -1,6 +1,8 @@
 package com.electrocorp.electrocorpplatform.billing.application.internal.commandservices;
 
 import com.electrocorp.electrocorpplatform.billing.application.commandservices.BillingCommandService;
+import com.electrocorp.electrocorpplatform.billing.application.gateways.PaymentGatewayChargeRequest;
+import com.electrocorp.electrocorpplatform.billing.application.gateways.PaymentGatewayPort;
 import com.electrocorp.electrocorpplatform.billing.domain.model.aggregates.Invoice;
 import com.electrocorp.electrocorpplatform.billing.domain.model.aggregates.Payment;
 import com.electrocorp.electrocorpplatform.billing.domain.model.aggregates.Plan;
@@ -10,11 +12,14 @@ import com.electrocorp.electrocorpplatform.billing.domain.model.commands.CancelS
 import com.electrocorp.electrocorpplatform.billing.domain.model.commands.CheckoutSubscriptionCommand;
 import com.electrocorp.electrocorpplatform.billing.domain.model.commands.ProcessPaymentCommand;
 import com.electrocorp.electrocorpplatform.billing.domain.model.commands.SubscribeCommand;
+import com.electrocorp.electrocorpplatform.billing.domain.model.events.PaymentRegisteredEvent;
+import com.electrocorp.electrocorpplatform.billing.domain.model.events.SubscriptionActivatedEvent;
 import com.electrocorp.electrocorpplatform.billing.domain.repositories.InvoiceRepository;
 import com.electrocorp.electrocorpplatform.billing.domain.repositories.PaymentRepository;
 import com.electrocorp.electrocorpplatform.billing.domain.repositories.PlanRepository;
 import com.electrocorp.electrocorpplatform.billing.domain.repositories.SubscriptionRepository;
 import com.electrocorp.electrocorpplatform.billing.domain.services.PaymentValidationService;
+import com.electrocorp.electrocorpplatform.shared.application.events.DomainEventPublisher;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,6 +33,8 @@ public class BillingCommandServiceImpl implements BillingCommandService {
     private final PaymentRepository paymentRepository;
     private final InvoiceRepository invoiceRepository;
     private final PaymentValidationService paymentValidationService;
+    private final PaymentGatewayPort paymentGatewayPort;
+    private final DomainEventPublisher domainEventPublisher;
 
     @Override
     @Transactional
@@ -36,6 +43,19 @@ public class BillingCommandServiceImpl implements BillingCommandService {
 
         Plan plan = planRepository.findByCode(command.planCode())
                 .orElseThrow(() -> new IllegalArgumentException("Plan not found."));
+
+        var chargeResult = paymentGatewayPort.charge(new PaymentGatewayChargeRequest(
+                command.userId(),
+                plan.getCode(),
+                plan.getMonthlyPrice(),
+                command.holderName(),
+                command.cardNumber(),
+                command.expirationDate()
+        ));
+
+        if (!chargeResult.approved()) {
+            throw new IllegalArgumentException("Payment gateway rejected the charge.");
+        }
 
         subscriptionRepository
                 .findFirstByUserIdAndStatus(command.userId(), SubscriptionStatus.ACTIVE)
@@ -51,8 +71,24 @@ public class BillingCommandServiceImpl implements BillingCommandService {
         Payment payment = paymentRepository.save(
                 new Payment(new ProcessPaymentCommand(command.userId(), subscription.getId()), subscription)
         );
+        payment.registerGatewayResult(
+                chargeResult.provider(),
+                chargeResult.transactionId(),
+                chargeResult.statusMessage()
+        );
+        payment = paymentRepository.save(payment);
 
         invoiceRepository.save(new Invoice(payment));
+        domainEventPublisher.publish(new SubscriptionActivatedEvent(
+                command.userId(),
+                subscription.getId(),
+                plan.getCode()
+        ));
+        domainEventPublisher.publish(new PaymentRegisteredEvent(
+                command.userId(),
+                payment.getId(),
+                payment.getAmount().getAmount()
+        ));
 
         return subscription;
     }
@@ -77,6 +113,11 @@ public class BillingCommandServiceImpl implements BillingCommandService {
         Payment payment = new Payment(command, subscription);
         Payment savedPayment = paymentRepository.save(payment);
         invoiceRepository.save(new Invoice(savedPayment));
+        domainEventPublisher.publish(new PaymentRegisteredEvent(
+                command.userId(),
+                savedPayment.getId(),
+                savedPayment.getAmount().getAmount()
+        ));
 
         return savedPayment;
     }

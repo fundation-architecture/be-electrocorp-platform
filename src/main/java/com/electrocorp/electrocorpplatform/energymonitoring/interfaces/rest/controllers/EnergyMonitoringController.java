@@ -13,7 +13,8 @@ import com.electrocorp.electrocorpplatform.energymonitoring.interfaces.rest.reso
 import com.electrocorp.electrocorpplatform.energymonitoring.interfaces.rest.resources.EnergySamplingSettingsResource;
 import com.electrocorp.electrocorpplatform.energymonitoring.interfaces.rest.transform.CreateEnergyReadingCommandFromResourceAssembler;
 import com.electrocorp.electrocorpplatform.energymonitoring.interfaces.rest.transform.EnergyReadingResourceFromEntityAssembler;
-import com.electrocorp.electrocorpplatform.shared.infrastructure.security.CurrentUserProvider;
+import com.electrocorp.electrocorpplatform.iam.application.security.AccessAuthorizationService;
+import com.electrocorp.electrocorpplatform.iam.domain.model.AccessPermission;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -30,14 +31,14 @@ public class EnergyMonitoringController {
 
     private final EnergyMonitoringCommandService commandService;
     private final EnergyMonitoringQueryService queryService;
-    private final CurrentUserProvider currentUserProvider;
+    private final AccessAuthorizationService accessAuthorizationService;
 
     @GetMapping
     public List<EnergyReadingResource> getReadings(
             @RequestParam(name = "recordedAt_gte", required = false) String recordedAtGte,
             @RequestParam(name = "recordedAt_lte", required = false) String recordedAtLte
     ) {
-        Long userId = currentUserProvider.getCurrentUserId();
+        Long userId = requireEnergyAccess();
         if (recordedAtGte != null && recordedAtLte != null) {
             return queryService.handle(new GetEnergyReadingsByUserQuery(
                     userId,
@@ -55,11 +56,12 @@ public class EnergyMonitoringController {
 
     @GetMapping("/dashboard-summary")
     public EnergyDashboardSummaryResource getDashboardSummary() {
-        return queryService.handle(new GetEnergyDashboardSummaryQuery(currentUserProvider.getCurrentUserId()));
+        return queryService.handle(new GetEnergyDashboardSummaryQuery(requireEnergyAccess()));
     }
 
     @GetMapping("/sampling-settings")
     public EnergySamplingSettingsResource getSamplingSettings() {
+        requireEnergyAccess();
         return new EnergySamplingSettingsResource(queryService.handle(new GetEnergySamplingSettingsQuery()));
     }
 
@@ -67,6 +69,7 @@ public class EnergyMonitoringController {
     public EnergySamplingSettingsResource updateSamplingSettings(
             @Valid @RequestBody UpdateEnergySamplingSettingsResource request
     ) {
+        requireEnergyAccess();
         return new EnergySamplingSettingsResource(
                 commandService.handle(new UpdateEnergySamplingSettingsCommand(request.sampleSeconds()))
         );
@@ -74,9 +77,13 @@ public class EnergyMonitoringController {
 
     @PostMapping
     public EnergyReadingResource createReading(@Valid @RequestBody CreateEnergyReadingResource request) {
-        var command = CreateEnergyReadingCommandFromResourceAssembler.toCommandFromResource(request, currentUserProvider.getCurrentUserId());
+        var command = CreateEnergyReadingCommandFromResourceAssembler.toCommandFromResource(request, requireEnergyAccess());
         var reading = commandService.handle(command);
         return EnergyReadingResourceFromEntityAssembler.toResourceFromEntity(reading);
+    }
+
+    private Long requireEnergyAccess() {
+        return accessAuthorizationService.requirePermission(AccessPermission.VIEW_ENERGY);
     }
 
     private LocalDateTime parseStart(String value) {

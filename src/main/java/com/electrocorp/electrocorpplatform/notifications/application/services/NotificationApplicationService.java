@@ -16,13 +16,16 @@ import com.electrocorp.electrocorpplatform.notifications.domain.model.valueobjec
 import com.electrocorp.electrocorpplatform.notifications.domain.repositories.*;
 import com.electrocorp.electrocorpplatform.notifications.domain.services.AlertPolicyService;
 import com.electrocorp.electrocorpplatform.notifications.domain.services.AlertSourceOwnershipService;
+import com.electrocorp.electrocorpplatform.notifications.domain.services.NotificationDeliveryPolicyService;
 import com.electrocorp.electrocorpplatform.notifications.domain.services.NotificationPreferencePolicyService;
 import com.electrocorp.electrocorpplatform.notifications.domain.services.RuleEvaluationService;
+import com.electrocorp.electrocorpplatform.notifications.infrastructure.delivery.NotificationDeliveryPort;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.format.DateTimeParseException;
 import java.math.BigDecimal;
 import java.util.List;
@@ -40,6 +43,8 @@ public class NotificationApplicationService {
     private final AlertSourceOwnershipService alertSourceOwnershipService;
     private final RuleEvaluationService ruleEvaluationService;
     private final NotificationPreferencePolicyService notificationPreferencePolicyService;
+    private final NotificationDeliveryPolicyService notificationDeliveryPolicyService;
+    private final NotificationDeliveryPort notificationDeliveryPort;
     private final AlertFactory alertFactory = new AlertFactory();
 
     @Transactional
@@ -67,7 +72,7 @@ public class NotificationApplicationService {
         LocalDateTime expiresAt = parseOptionalDateTime(command.expiresAt());
         LocalDateTime now = LocalDateTime.now();
 
-        return alertRepository
+        Alert alert = alertRepository
                 .findFirstByUserIdAndThreadKeyAndActiveTrueOrderByLastTriggeredAtDesc(command.userId(), threadKey)
                 .map(existingAlert -> {
                     existingAlert.refresh(
@@ -85,7 +90,7 @@ public class NotificationApplicationService {
                     return alertRepository.save(existingAlert);
                 })
                 .orElseGet(() -> {
-                    Alert alert = alertFactory.create(
+                    Alert createdAlert = alertFactory.create(
                             command.userId(),
                             command.title(),
                             command.message(),
@@ -101,8 +106,20 @@ public class NotificationApplicationService {
                             alertPolicyService.normalizeScore(command.severityScore()),
                             expiresAt
                     );
-                    return alertRepository.save(alert);
+                    return alertRepository.save(createdAlert);
                 });
+
+        deliverAlert(alert);
+        return alert;
+    }
+
+    private void deliverAlert(Alert alert) {
+        NotificationPreference preference = getPreference(alert.getUserId());
+        var decision = notificationDeliveryPolicyService.decide(preference, alert, LocalTime.now());
+
+        if (decision.allowed()) {
+            notificationDeliveryPort.send(alert, preference, decision);
+        }
     }
 
     @Transactional
@@ -363,6 +380,7 @@ public class NotificationApplicationService {
         if (command.systemRecommendations() != null) preference.setSystemRecommendations(command.systemRecommendations());
         if (command.dailySummaryEnabled() != null) preference.setDailySummaryEnabled(command.dailySummaryEnabled());
         if (command.weeklySummaryEnabled() != null) preference.setWeeklySummaryEnabled(command.weeklySummaryEnabled());
+        if (command.monthlyReportEnabled() != null) preference.setMonthlyReportEnabled(command.monthlyReportEnabled());
 
         String allowedLevels = notificationPreferencePolicyService.normalizeLevelSet(command.allowedLevels());
         String allowedSources = notificationPreferencePolicyService.normalizeSourceSet(command.allowedSourceTypes());

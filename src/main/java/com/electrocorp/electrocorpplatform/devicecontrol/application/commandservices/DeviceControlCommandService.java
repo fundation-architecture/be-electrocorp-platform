@@ -16,13 +16,17 @@ import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.commands.D
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.commands.DeleteRoutineCommand;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.commands.ExecuteGroupActionCommand;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.commands.ExecuteRoutineCommand;
+import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.commands.PairDeviceCommand;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.commands.ToggleDeviceCommand;
+import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.commands.UpdateDeviceCommand;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.commands.UpdateDeviceGroupCommand;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.commands.UpdateDeviceStatusCommand;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.commands.UpdateRoutineStatusCommand;
 
 public interface DeviceControlCommandService {
     Device handle(CreateDeviceCommand command);
+    Device handle(PairDeviceCommand command);
+    Device handle(UpdateDeviceCommand command);
     Device handle(ToggleDeviceCommand command);
     Device handle(Long deviceId, Long userId, UpdateDeviceStatusCommand command);
     void handle(DeleteDeviceCommand command);

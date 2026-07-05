@@ -1,6 +1,7 @@
 package com.electrocorp.electrocorpplatform.workplace.interfaces.rest.controllers;
 
-import com.electrocorp.electrocorpplatform.workplace.application.services.WorkplaceApplicationService;
+import com.electrocorp.electrocorpplatform.workplace.application.commandservices.WorkplaceCommandService;
+import com.electrocorp.electrocorpplatform.workplace.application.queryservices.WorkplaceQueryService;
 import com.electrocorp.electrocorpplatform.workplace.interfaces.rest.resources.*;
 import com.electrocorp.electrocorpplatform.workplace.interfaces.rest.transform.AssignDeviceCommandFromResourceAssembler;
 import com.electrocorp.electrocorpplatform.workplace.interfaces.rest.transform.CreateLocationCommandFromResourceAssembler;
@@ -8,7 +9,8 @@ import com.electrocorp.electrocorpplatform.workplace.interfaces.rest.transform.C
 import com.electrocorp.electrocorpplatform.workplace.interfaces.rest.transform.DeviceAssignmentResourceFromEntityAssembler;
 import com.electrocorp.electrocorpplatform.workplace.interfaces.rest.transform.LocationResourceFromEntityAssembler;
 import com.electrocorp.electrocorpplatform.workplace.interfaces.rest.transform.RoomResourceFromEntityAssembler;
-import com.electrocorp.electrocorpplatform.shared.infrastructure.security.CurrentUserProvider;
+import com.electrocorp.electrocorpplatform.iam.application.security.AccessAuthorizationService;
+import com.electrocorp.electrocorpplatform.iam.domain.model.AccessPermission;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -20,12 +22,13 @@ import java.util.List;
 @RequiredArgsConstructor
 public class WorkplaceController {
 
-    private final WorkplaceApplicationService service;
-    private final CurrentUserProvider currentUserProvider;
+    private final WorkplaceCommandService commandService;
+    private final WorkplaceQueryService queryService;
+    private final AccessAuthorizationService accessAuthorizationService;
 
     @GetMapping("/locations")
     public List<LocationResource> getLocations() {
-        return service.getLocations(currentUserProvider.getCurrentUserId())
+        return queryService.getLocations(requireSpaceManagement())
                 .stream()
                 .map(LocationResourceFromEntityAssembler::toResourceFromEntity)
                 .toList();
@@ -34,7 +37,7 @@ public class WorkplaceController {
     @PostMapping("/locations")
     public LocationResource createLocation(@Valid @RequestBody CreateLocationResource request) {
         return LocationResourceFromEntityAssembler.toResourceFromEntity(
-                service.createLocation(CreateLocationCommandFromResourceAssembler.toCommandFromResource(request, currentUserProvider.getCurrentUserId()))
+                commandService.createLocation(CreateLocationCommandFromResourceAssembler.toCommandFromResource(request, requireSpaceManagement()))
         );
     }
 
@@ -42,9 +45,10 @@ public class WorkplaceController {
     public List<RoomResource> getRooms(
             @RequestParam(required = false) Long locationId
     ) {
+        Long userId = requireSpaceManagement();
         List<com.electrocorp.electrocorpplatform.workplace.domain.model.aggregates.Room> rooms = locationId != null
-                ? service.getRooms(currentUserProvider.getCurrentUserId(), locationId)
-                : service.getRoomsByUserId(currentUserProvider.getCurrentUserId());
+                ? queryService.getRooms(userId, locationId)
+                : queryService.getRoomsByUserId(userId);
 
         return rooms
                 .stream()
@@ -55,7 +59,7 @@ public class WorkplaceController {
     @PostMapping("/rooms")
     public RoomResource createRoom(@Valid @RequestBody CreateRoomResource request) {
         return RoomResourceFromEntityAssembler.toResourceFromEntity(
-                service.createRoom(currentUserProvider.getCurrentUserId(), CreateRoomCommandFromResourceAssembler.toCommandFromResource(request))
+                commandService.createRoom(requireSpaceManagement(), CreateRoomCommandFromResourceAssembler.toCommandFromResource(request))
         );
     }
 
@@ -64,11 +68,12 @@ public class WorkplaceController {
             @RequestParam(required = false) Long locationId,
             @RequestParam(required = false) Long deviceId
     ) {
+        Long userId = requireSpaceManagement();
         List<com.electrocorp.electrocorpplatform.workplace.domain.model.aggregates.DeviceAssignment> assignments = deviceId != null
-                ? service.getAssignmentsByDeviceId(currentUserProvider.getCurrentUserId(), deviceId)
+                ? queryService.getAssignmentsByDeviceId(userId, deviceId)
                 : locationId != null
-                ? service.getAssignments(currentUserProvider.getCurrentUserId(), locationId)
-                : service.getAssignmentsByUserId(currentUserProvider.getCurrentUserId());
+                ? queryService.getAssignments(userId, locationId)
+                : queryService.getAssignmentsByUserId(userId);
 
         return assignments
                 .stream()
@@ -79,7 +84,7 @@ public class WorkplaceController {
     @PostMapping("/device-assignments")
     public DeviceAssignmentResource assignDevice(@Valid @RequestBody AssignDeviceResource request) {
         return DeviceAssignmentResourceFromEntityAssembler.toResourceFromEntity(
-                service.assignDevice(currentUserProvider.getCurrentUserId(), AssignDeviceCommandFromResourceAssembler.toCommandFromResource(request))
+                commandService.assignDevice(requireSpaceManagement(), AssignDeviceCommandFromResourceAssembler.toCommandFromResource(request))
         );
     }
 
@@ -89,13 +94,13 @@ public class WorkplaceController {
             @RequestBody UpdateLocationResource request
     ) {
         return LocationResourceFromEntityAssembler.toResourceFromEntity(
-                service.updateLocation(currentUserProvider.getCurrentUserId(), locationId, request.name(), request.address(), request.type())
+                commandService.updateLocation(requireSpaceManagement(), locationId, request.name(), request.address(), request.type())
         );
     }
 
     @DeleteMapping("/locations/{locationId}")
     public void deleteLocation(@PathVariable Long locationId) {
-        service.deleteLocation(currentUserProvider.getCurrentUserId(), locationId);
+        commandService.deleteLocation(requireSpaceManagement(), locationId);
     }
 
     @PatchMapping("/rooms/{roomId}")
@@ -104,13 +109,13 @@ public class WorkplaceController {
             @RequestBody UpdateRoomResource request
     ) {
         return RoomResourceFromEntityAssembler.toResourceFromEntity(
-                service.updateRoom(currentUserProvider.getCurrentUserId(), roomId, request.locationId(), request.name(), request.floor())
+                commandService.updateRoom(requireSpaceManagement(), roomId, request.locationId(), request.name(), request.floor())
         );
     }
 
     @DeleteMapping("/rooms/{roomId}")
     public void deleteRoom(@PathVariable Long roomId) {
-        service.deleteRoom(currentUserProvider.getCurrentUserId(), roomId);
+        commandService.deleteRoom(requireSpaceManagement(), roomId);
     }
 
     @PatchMapping("/device-assignments/{assignmentId}")
@@ -119,12 +124,16 @@ public class WorkplaceController {
             @RequestBody MoveDeviceAssignmentResource request
     ) {
         return DeviceAssignmentResourceFromEntityAssembler.toResourceFromEntity(
-                service.moveAssignment(currentUserProvider.getCurrentUserId(), assignmentId, request.locationId(), request.roomId())
+                commandService.moveAssignment(requireSpaceManagement(), assignmentId, request.locationId(), request.roomId())
         );
     }
 
     @DeleteMapping("/device-assignments/{assignmentId}")
     public void deleteAssignment(@PathVariable Long assignmentId) {
-        service.deleteAssignment(currentUserProvider.getCurrentUserId(), assignmentId);
+        commandService.deleteAssignment(requireSpaceManagement(), assignmentId);
+    }
+
+    private Long requireSpaceManagement() {
+        return accessAuthorizationService.requirePermission(AccessPermission.MANAGE_SPACES);
     }
 }

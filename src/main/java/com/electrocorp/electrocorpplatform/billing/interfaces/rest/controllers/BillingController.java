@@ -14,7 +14,8 @@ import com.electrocorp.electrocorpplatform.billing.interfaces.rest.transform.Pla
 import com.electrocorp.electrocorpplatform.billing.interfaces.rest.transform.CheckoutSubscriptionCommandFromResourceAssembler;
 import com.electrocorp.electrocorpplatform.billing.interfaces.rest.transform.ProcessPaymentCommandFromResourceAssembler;
 import com.electrocorp.electrocorpplatform.billing.interfaces.rest.transform.SubscriptionResourceFromEntityAssembler;
-import com.electrocorp.electrocorpplatform.shared.infrastructure.security.CurrentUserProvider;
+import com.electrocorp.electrocorpplatform.iam.application.security.AccessAuthorizationService;
+import com.electrocorp.electrocorpplatform.iam.domain.model.AccessPermission;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -28,7 +29,7 @@ public class BillingController {
 
     private final BillingCommandService billingCommandService;
     private final BillingQueryService billingQueryService;
-    private final CurrentUserProvider currentUserProvider;
+    private final AccessAuthorizationService accessAuthorizationService;
 
     @GetMapping("/plans")
     public List<PlanResource> getPlans() {
@@ -40,23 +41,25 @@ public class BillingController {
 
     @GetMapping("/subscriptions/current")
     public SubscriptionResource getCurrentSubscription() {
-        return billingQueryService.handle(new GetCurrentSubscriptionQuery(currentUserProvider.getCurrentUserId()))
+        return billingQueryService.handle(new GetCurrentSubscriptionQuery(accessAuthorizationService.requireActiveUser()))
                 .map(SubscriptionResourceFromEntityAssembler::toResourceFromEntity)
                 .orElse(null);
     }
 
     @PostMapping("/subscriptions")
     public SubscriptionResource subscribe(@Valid @RequestBody SubscribeResource request) {
+        requireBillingAccess();
         throw new IllegalArgumentException("Direct subscription creation is no longer supported. Use /api/v1/billing/subscriptions/checkout.");
     }
 
     @PostMapping("/subscriptions/checkout")
     public SubscriptionResource checkoutSubscription(@Valid @RequestBody CheckoutSubscriptionResource request) {
+        Long userId = requireBillingAccess();
         return SubscriptionResourceFromEntityAssembler.toResourceFromEntity(
                 billingCommandService.handle(
                         CheckoutSubscriptionCommandFromResourceAssembler.toCommandFromResource(
                                 request,
-                                currentUserProvider.getCurrentUserId()
+                                userId
                         )
                 )
         );
@@ -64,16 +67,17 @@ public class BillingController {
 
     @DeleteMapping("/subscriptions/current")
     public void cancelSubscription() {
-        billingCommandService.handle(new CancelSubscriptionCommand(currentUserProvider.getCurrentUserId()));
+        billingCommandService.handle(new CancelSubscriptionCommand(requireBillingAccess()));
     }
 
     @PostMapping("/payments")
     public PaymentResource processPayment(@Valid @RequestBody ProcessPaymentResource request) {
+        Long userId = requireBillingAccess();
         return PaymentResourceFromEntityAssembler.toResourceFromEntity(
                 billingCommandService.handle(
                         ProcessPaymentCommandFromResourceAssembler.toCommandFromResource(
                                 request,
-                                currentUserProvider.getCurrentUserId()
+                                userId
                         )
                 )
         );
@@ -81,7 +85,7 @@ public class BillingController {
 
     @GetMapping("/payments")
     public List<PaymentResource> getPayments() {
-        return billingQueryService.handle(new GetPaymentsByUserQuery(currentUserProvider.getCurrentUserId()))
+        return billingQueryService.handle(new GetPaymentsByUserQuery(requireBillingAccess()))
                 .stream()
                 .map(PaymentResourceFromEntityAssembler::toResourceFromEntity)
                 .toList();
@@ -89,9 +93,13 @@ public class BillingController {
 
     @GetMapping("/invoices")
     public List<InvoiceResource> getInvoices() {
-        return billingQueryService.handle(new GetInvoicesByUserQuery(currentUserProvider.getCurrentUserId()))
+        return billingQueryService.handle(new GetInvoicesByUserQuery(requireBillingAccess()))
                 .stream()
                 .map(InvoiceResourceFromEntityAssembler::toResourceFromEntity)
                 .toList();
+    }
+
+    private Long requireBillingAccess() {
+        return accessAuthorizationService.requirePermission(AccessPermission.MANAGE_BILLING);
     }
 }

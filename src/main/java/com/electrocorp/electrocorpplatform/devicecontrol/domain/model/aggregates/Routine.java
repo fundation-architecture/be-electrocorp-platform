@@ -6,6 +6,8 @@ import com.electrocorp.electrocorpplatform.shared.domain.model.AuditableEntity;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.time.LocalDateTime;
+
 @Getter
 @Setter
 @NoArgsConstructor
@@ -56,12 +58,27 @@ public class Routine extends AuditableEntity {
     @Column(nullable = false)
     private Boolean enabled = true;
 
+    @Column(name = "last_executed_at")
+    private LocalDateTime lastExecutedAt;
+
     public void toggle() {
         this.enabled = this.enabled == null || !this.enabled;
     }
 
+    public boolean isEnabled() {
+        return this.enabled == null || this.enabled;
+    }
+
     public String getExecutionTime() {
         return this.time;
+    }
+
+    public void markExecutedAt(LocalDateTime executedAt) {
+        this.lastExecutedAt = executedAt != null ? executedAt : LocalDateTime.now();
+
+        if (getEffectiveRepeatType() == RoutineRepeatType.ONCE) {
+            this.enabled = false;
+        }
     }
 
     public RoutineRepeatType getEffectiveRepeatType() {

@@ -10,7 +10,9 @@ public record PaymentResource(
         BigDecimal amount,
         String currency,
         String status,
-        String paymentMethod
+        String paymentMethod,
+        String gatewayTransactionId,
+        String gatewayStatusMessage
 ) {
     public static PaymentResource from(Payment payment) {
         return new PaymentResource(
@@ -19,7 +21,9 @@ public record PaymentResource(
                 payment.getAmount() != null ? payment.getAmount().getAmount() : null,
                 payment.getAmount() != null ? payment.getAmount().getCurrency() : null,
                 payment.getStatus().name(),
-                payment.getPaymentMethod()
+                payment.getPaymentMethod(),
+                payment.getGatewayTransactionId(),
+                payment.getGatewayStatusMessage()
         );
     }
 }

@@ -24,12 +24,15 @@ import com.electrocorp.electrocorpplatform.devicecontrol.interfaces.rest.resourc
 import com.electrocorp.electrocorpplatform.devicecontrol.interfaces.rest.resources.OperationModeActivationResource;
 import com.electrocorp.electrocorpplatform.devicecontrol.interfaces.rest.resources.OperationModePreviewResource;
 import com.electrocorp.electrocorpplatform.devicecontrol.interfaces.rest.resources.OperationModeResource;
+import com.electrocorp.electrocorpplatform.devicecontrol.interfaces.rest.resources.PairDeviceResource;
 import com.electrocorp.electrocorpplatform.devicecontrol.interfaces.rest.resources.RoutineResource;
 import com.electrocorp.electrocorpplatform.devicecontrol.interfaces.rest.resources.UpdateRoutineStatusResource;
+import com.electrocorp.electrocorpplatform.devicecontrol.interfaces.rest.resources.UpdateDeviceResource;
 import com.electrocorp.electrocorpplatform.devicecontrol.interfaces.rest.resources.UpdateDeviceStatusResource;
 import com.electrocorp.electrocorpplatform.devicecontrol.interfaces.rest.resources.UpdateDeviceGroupResource;
 import com.electrocorp.electrocorpplatform.devicecontrol.interfaces.rest.transform.*;
-import com.electrocorp.electrocorpplatform.shared.infrastructure.security.CurrentUserProvider;
+import com.electrocorp.electrocorpplatform.iam.application.security.AccessAuthorizationService;
+import com.electrocorp.electrocorpplatform.iam.domain.model.AccessPermission;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -43,18 +46,25 @@ public class DeviceControlController {
 
     private final DeviceControlCommandService commandService;
     private final DeviceControlQueryService queryService;
-    private final CurrentUserProvider currentUserProvider;
+    private final AccessAuthorizationService accessAuthorizationService;
 
     @GetMapping("/devices")
     public List<DeviceResource> getDevices() {
-        return queryService.handle(new GetDevicesQuery(currentUserProvider.getCurrentUserId())).stream()
+        return queryService.handle(new GetDevicesQuery(requireDeviceControl())).stream()
                 .map(DeviceResourceFromEntityAssembler::toResourceFromEntity)
                 .toList();
     }
 
     @PostMapping("/devices")
     public DeviceResource createDevice(@Valid @RequestBody CreateDeviceResource request) {
-        var command = CreateDeviceCommandFromResourceAssembler.toCommandFromResource(request, currentUserProvider.getCurrentUserId());
+        var command = CreateDeviceCommandFromResourceAssembler.toCommandFromResource(request, requireDeviceManagement());
+        var device = commandService.handle(command);
+        return DeviceResourceFromEntityAssembler.toResourceFromEntity(device);
+    }
+
+    @PostMapping("/devices/pairings")
+    public DeviceResource pairDevice(@Valid @RequestBody PairDeviceResource request) {
+        var command = PairDeviceCommandFromResourceAssembler.toCommandFromResource(request, requireDeviceManagement());
         var device = commandService.handle(command);
         return DeviceResourceFromEntityAssembler.toResourceFromEntity(device);
     }
@@ -63,7 +73,21 @@ public class DeviceControlController {
     public DeviceResource toggleDevice(
             @PathVariable Long deviceId
     ) {
-        var device = commandService.handle(new ToggleDeviceCommand(currentUserProvider.getCurrentUserId(), deviceId));
+        var device = commandService.handle(new ToggleDeviceCommand(requireDeviceControl(), deviceId));
+        return DeviceResourceFromEntityAssembler.toResourceFromEntity(device);
+    }
+
+    @PatchMapping("/devices/{deviceId}")
+    public DeviceResource updateDevice(
+            @PathVariable Long deviceId,
+            @Valid @RequestBody UpdateDeviceResource request
+    ) {
+        var command = UpdateDeviceCommandFromResourceAssembler.toCommandFromResource(
+                request,
+                requireDeviceManagement(),
+                deviceId
+        );
+        var device = commandService.handle(command);
         return DeviceResourceFromEntityAssembler.toResourceFromEntity(device);
     }
 
@@ -71,12 +95,12 @@ public class DeviceControlController {
     public void deleteDevice(
             @PathVariable Long deviceId
     ) {
-        commandService.handle(new DeleteDeviceCommand(currentUserProvider.getCurrentUserId(), deviceId));
+        commandService.handle(new DeleteDeviceCommand(requireDeviceManagement(), deviceId));
     }
 
     @GetMapping("/routines")
     public List<RoutineResource> getRoutines() {
-        return queryService.handle(new GetRoutinesQuery(currentUserProvider.getCurrentUserId())).stream()
+        return queryService.handle(new GetRoutinesQuery(requireRoutineManagement())).stream()
                 .map(RoutineResourceFromResultAssembler::toResourceFromResult)
                 .toList();
     }
@@ -85,7 +109,7 @@ public class DeviceControlController {
     public RoutineResource createRoutine(
             @Valid @RequestBody CreateRoutineResource request
     ) {
-        var command = CreateRoutineCommandFromResourceAssembler.toCommandFromResource(request, currentUserProvider.getCurrentUserId());
+        var command = CreateRoutineCommandFromResourceAssembler.toCommandFromResource(request, requireRoutineManagement());
         var routine = commandService.handle(command);
         return RoutineResourceFromResultAssembler.toResourceFromResult(routine);
     }
@@ -96,7 +120,7 @@ public class DeviceControlController {
             @RequestBody UpdateRoutineStatusResource request
     ) {
         var command = UpdateRoutineStatusCommandFromResourceAssembler.toCommandFromResource(request);
-        var routine = commandService.handle(routineId, currentUserProvider.getCurrentUserId(), command);
+        var routine = commandService.handle(routineId, requireRoutineManagement(), command);
         return RoutineResourceFromResultAssembler.toResourceFromResult(routine);
     }
 
@@ -104,20 +128,20 @@ public class DeviceControlController {
     public void deleteRoutine(
             @PathVariable Long routineId
     ) {
-        commandService.handle(new DeleteRoutineCommand(currentUserProvider.getCurrentUserId(), routineId));
+        commandService.handle(new DeleteRoutineCommand(requireRoutineManagement(), routineId));
     }
 
     @PatchMapping("/routines/{routineId}/execute")
     public RoutineResource executeRoutine(
             @PathVariable Long routineId
     ) {
-        var routine = commandService.handle(new ExecuteRoutineCommand(currentUserProvider.getCurrentUserId(), routineId));
+        var routine = commandService.handle(new ExecuteRoutineCommand(requireRoutineManagement(), routineId));
         return RoutineResourceFromResultAssembler.toResourceFromResult(routine);
     }
 
     @GetMapping("/device-groups")
     public List<DeviceGroupResource> getDeviceGroups() {
-        return queryService.handle(new GetDeviceGroupsQuery(currentUserProvider.getCurrentUserId())).stream()
+        return queryService.handle(new GetDeviceGroupsQuery(requireRoutineManagement())).stream()
                 .map(DeviceGroupResourceFromResultAssembler::toResourceFromResult)
                 .toList();
     }
@@ -126,7 +150,7 @@ public class DeviceControlController {
     public DeviceGroupResource createDeviceGroup(
             @Valid @RequestBody CreateDeviceGroupResource request
     ) {
-        var command = CreateDeviceGroupCommandFromResourceAssembler.toCommandFromResource(request, currentUserProvider.getCurrentUserId());
+        var command = CreateDeviceGroupCommandFromResourceAssembler.toCommandFromResource(request, requireRoutineManagement());
         var group = commandService.handle(command);
         return DeviceGroupResourceFromResultAssembler.toResourceFromResult(group);
     }
@@ -137,7 +161,7 @@ public class DeviceControlController {
             @Valid @RequestBody UpdateDeviceGroupResource request
     ) {
         var command = UpdateDeviceGroupCommandFromResourceAssembler.toCommandFromResource(request);
-        var group = commandService.handle(currentUserProvider.getCurrentUserId(), groupId, command);
+        var group = commandService.handle(requireRoutineManagement(), groupId, command);
         return DeviceGroupResourceFromResultAssembler.toResourceFromResult(group);
     }
 
@@ -147,12 +171,12 @@ public class DeviceControlController {
             @Valid @RequestBody ExecuteGroupActionResource request
     ) {
         var command = ExecuteGroupActionCommandFromResourceAssembler.toCommandFromResource(request);
-        commandService.handle(currentUserProvider.getCurrentUserId(), groupId, command);
+        commandService.handle(requireDeviceControl(), groupId, command);
     }
 
     @DeleteMapping("/device-groups/{groupId}")
     public void deleteDeviceGroup(@PathVariable Long groupId) {
-        commandService.handle(new DeleteDeviceGroupCommand(currentUserProvider.getCurrentUserId(), groupId));
+        commandService.handle(new DeleteDeviceGroupCommand(requireRoutineManagement(), groupId));
     }
     @PatchMapping("/devices/{deviceId}/status")
     public DeviceResource updateDeviceStatus(
@@ -160,20 +184,20 @@ public class DeviceControlController {
             @Valid @RequestBody UpdateDeviceStatusResource request
     ) {
         var command = UpdateDeviceStatusCommandFromResourceAssembler.toCommandFromResource(request);
-        var device = commandService.handle(deviceId, currentUserProvider.getCurrentUserId(), command);
+        var device = commandService.handle(deviceId, requireDeviceControl(), command);
         return DeviceResourceFromEntityAssembler.toResourceFromEntity(device);
     }
 
     @GetMapping("/operation-modes")
     public List<OperationModeResource> getOperationModes() {
-        return queryService.handle(new GetOperationModesQuery(currentUserProvider.getCurrentUserId())).stream()
+        return queryService.handle(new GetOperationModesQuery(requireRoutineManagement())).stream()
                 .map(OperationModeResource::from)
                 .toList();
     }
 
     @PostMapping("/operation-modes")
     public OperationModeResource createOperationMode(@Valid @RequestBody CreateOperationModeResource request) {
-        var command = CreateOperationModeCommandFromResourceAssembler.toCommandFromResource(request, currentUserProvider.getCurrentUserId());
+        var command = CreateOperationModeCommandFromResourceAssembler.toCommandFromResource(request, requireRoutineManagement());
         var mode = commandService.handle(command);
         return OperationModeResource.from(mode);
     }
@@ -182,7 +206,7 @@ public class DeviceControlController {
     public OperationModePreviewResource previewOperationMode(
             @PathVariable Long modeId
     ) {
-        var preview = queryService.handle(new PreviewOperationModeQuery(currentUserProvider.getCurrentUserId(), modeId));
+        var preview = queryService.handle(new PreviewOperationModeQuery(requireRoutineManagement(), modeId));
         return OperationModePreviewResource.from(preview);
     }
 
@@ -190,7 +214,7 @@ public class DeviceControlController {
     public OperationModeActivationResource activateOperationMode(
             @PathVariable Long modeId
     ) {
-        var result = commandService.handle(new ActivateOperationModeCommand(currentUserProvider.getCurrentUserId(), modeId));
+        var result = commandService.handle(new ActivateOperationModeCommand(requireRoutineManagement(), modeId));
         return OperationModeActivationResource.from(result);
     }
 
@@ -198,6 +222,18 @@ public class DeviceControlController {
     public void archiveOperationMode(
             @PathVariable Long modeId
     ) {
-        commandService.handle(new ArchiveOperationModeCommand(currentUserProvider.getCurrentUserId(), modeId));
+        commandService.handle(new ArchiveOperationModeCommand(requireRoutineManagement(), modeId));
+    }
+
+    private Long requireDeviceControl() {
+        return accessAuthorizationService.requirePermission(AccessPermission.CONTROL_DEVICES);
+    }
+
+    private Long requireDeviceManagement() {
+        return accessAuthorizationService.requirePermission(AccessPermission.MANAGE_DEVICES);
+    }
+
+    private Long requireRoutineManagement() {
+        return accessAuthorizationService.requirePermission(AccessPermission.MANAGE_ROUTINES);
     }
 }

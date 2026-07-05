@@ -1,11 +1,14 @@
 package com.electrocorp.electrocorpplatform.workplace.application.services;
 
+import com.electrocorp.electrocorpplatform.devicecontrol.application.facades.DeviceControlContextFacade;
+import com.electrocorp.electrocorpplatform.shared.application.events.DomainEventPublisher;
+import com.electrocorp.electrocorpplatform.workplace.application.commandservices.WorkplaceCommandService;
+import com.electrocorp.electrocorpplatform.workplace.application.queryservices.WorkplaceQueryService;
 import com.electrocorp.electrocorpplatform.workplace.domain.model.commands.AssignDeviceCommand;
 import com.electrocorp.electrocorpplatform.workplace.domain.model.commands.CreateLocationCommand;
 import com.electrocorp.electrocorpplatform.workplace.domain.model.commands.CreateRoomCommand;
-import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.aggregates.Device;
-import com.electrocorp.electrocorpplatform.devicecontrol.domain.repositories.DeviceRepository;
 import com.electrocorp.electrocorpplatform.workplace.domain.model.aggregates.*;
+import com.electrocorp.electrocorpplatform.workplace.domain.model.events.DeviceAssignedToRoomEvent;
 import com.electrocorp.electrocorpplatform.workplace.domain.repositories.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -18,18 +21,21 @@ import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
-public class WorkplaceApplicationService {
+public class WorkplaceApplicationService implements WorkplaceCommandService, WorkplaceQueryService {
 
     private final LocationRepository locationRepository;
     private final RoomRepository roomRepository;
     private final DeviceAssignmentRepository assignmentRepository;
-    private final DeviceRepository deviceRepository;
+    private final DeviceControlContextFacade deviceControlContextFacade;
+    private final DomainEventPublisher domainEventPublisher;
 
+    @Override
     @Transactional(readOnly = true)
     public List<Location> getLocations(Long userId) {
         return locationRepository.findByUserId(userId);
     }
 
+    @Override
     @Transactional
     public Location createLocation(CreateLocationCommand command) {
         Location location = new Location();
@@ -40,12 +46,14 @@ public class WorkplaceApplicationService {
         return locationRepository.save(location);
     }
 
+    @Override
     @Transactional(readOnly = true)
     public List<Room> getRooms(Long userId, Long locationId) {
         getLocationForUser(locationId, userId);
         return roomRepository.findByLocationId(locationId);
     }
 
+    @Override
     @Transactional(readOnly = true)
     public List<Room> getRoomsByUserId(Long userId) {
         List<Long> locationIds = locationRepository.findByUserId(userId)
@@ -56,6 +64,7 @@ public class WorkplaceApplicationService {
         return locationIds.isEmpty() ? List.of() : roomRepository.findByLocationIdIn(locationIds);
     }
 
+    @Override
     @Transactional
     public Room createRoom(Long userId, CreateRoomCommand command) {
         getLocationForUser(command.locationId(), userId);
@@ -67,6 +76,7 @@ public class WorkplaceApplicationService {
         return roomRepository.save(room);
     }
 
+    @Override
     @Transactional(readOnly = true)
     public List<DeviceAssignment> getAssignments(Long userId, Long locationId) {
         getLocationForUser(locationId, userId);
@@ -76,15 +86,16 @@ public class WorkplaceApplicationService {
                 .toList();
     }
 
+    @Override
     @Transactional(readOnly = true)
     public List<DeviceAssignment> getAssignmentsByUserId(Long userId) {
         return getCurrentAssignmentsByUserId(userId);
     }
 
+    @Override
     @Transactional(readOnly = true)
     public List<DeviceAssignment> getAssignmentsByDeviceId(Long userId, Long deviceId) {
-        deviceRepository.findByIdAndUserId(deviceId, userId)
-                .orElseThrow(() -> new IllegalArgumentException("Device not found."));
+        deviceControlContextFacade.ensureDeviceBelongsToUser(deviceId, userId);
 
         return getCurrentAssignmentsByUserId(userId)
                 .stream()
@@ -92,11 +103,11 @@ public class WorkplaceApplicationService {
                 .toList();
     }
 
+    @Override
     @Transactional
     public DeviceAssignment assignDevice(Long userId, AssignDeviceCommand command) {
         getLocationForUser(command.locationId(), userId);
-        Device device = deviceRepository.findByIdAndUserId(command.deviceId(), userId)
-                .orElseThrow(() -> new IllegalArgumentException("Device not found."));
+        deviceControlContextFacade.ensureDeviceBelongsToUser(command.deviceId(), userId);
 
         Room room = getRoomForLocation(command.roomId(), command.locationId());
 
@@ -110,10 +121,16 @@ public class WorkplaceApplicationService {
         assignment.setLocationId(command.locationId());
         assignment.setAssignedAt(LocalDateTime.now());
         DeviceAssignment savedAssignment = assignmentRepository.save(assignment);
-        syncDeviceRoom(device, room);
+        syncDeviceRoom(command.deviceId(), userId, room);
+        domainEventPublisher.publish(new DeviceAssignedToRoomEvent(
+                userId,
+                savedAssignment.getDeviceId(),
+                savedAssignment.getRoomId()
+        ));
         return savedAssignment;
     }
 
+    @Override
     @Transactional
     public Location updateLocation(Long userId, Long locationId, String name, String address, String type) {
         Location location = getLocationForUser(locationId, userId);
@@ -125,6 +142,7 @@ public class WorkplaceApplicationService {
         return locationRepository.save(location);
     }
 
+    @Override
     @Transactional
     public void deleteLocation(Long userId, Long locationId) {
         Location location = getLocationForUser(locationId, userId);
@@ -132,6 +150,7 @@ public class WorkplaceApplicationService {
         locationRepository.delete(location);
     }
 
+    @Override
     @Transactional
     public Room updateRoom(Long userId, Long roomId, Long locationId, String name, String floor) {
         Room room = roomRepository.findById(roomId)
@@ -156,6 +175,7 @@ public class WorkplaceApplicationService {
         return savedRoom;
     }
 
+    @Override
     @Transactional
     public void deleteRoom(Long userId, Long roomId) {
         Room room = roomRepository.findById(roomId)
@@ -173,6 +193,7 @@ public class WorkplaceApplicationService {
         roomRepository.delete(room);
     }
 
+    @Override
     @Transactional
     public DeviceAssignment moveAssignment(Long userId, Long assignmentId, Long locationId, Long roomId) {
         DeviceAssignment assignment = assignmentRepository.findById(assignmentId)
@@ -191,9 +212,15 @@ public class WorkplaceApplicationService {
 
         DeviceAssignment savedAssignment = assignmentRepository.save(assignment);
         syncDeviceRoom(assignment.getDeviceId(), userId, room);
+        domainEventPublisher.publish(new DeviceAssignedToRoomEvent(
+                userId,
+                savedAssignment.getDeviceId(),
+                savedAssignment.getRoomId()
+        ));
         return savedAssignment;
     }
 
+    @Override
     @Transactional
     public void deleteAssignment(Long userId, Long assignmentId) {
         DeviceAssignment assignment = assignmentRepository.findById(assignmentId)
@@ -225,13 +252,7 @@ public class WorkplaceApplicationService {
     }
 
     private void syncDeviceRoom(Long deviceId, Long userId, Room room) {
-        deviceRepository.findByIdAndUserId(deviceId, userId)
-                .ifPresent(device -> syncDeviceRoom(device, room));
-    }
-
-    private void syncDeviceRoom(Device device, Room room) {
-        device.setRoom(room != null ? room.getName().trim() : "");
-        deviceRepository.save(device);
+        deviceControlContextFacade.updateDeviceRoom(deviceId, userId, room != null ? room.getName() : "");
     }
 
     private List<DeviceAssignment> getCurrentAssignmentsByUserId(Long userId) {

@@ -1,0 +1,15 @@
+package com.electrocorp.electrocorpplatform.iam.domain.model;
+
+public enum AccessPermission {
+    VIEW_HOME,
+    CONTROL_DEVICES,
+    MANAGE_DEVICES,
+    MANAGE_ROUTINES,
+    MANAGE_SPACES,
+    VIEW_ENERGY,
+    VIEW_REPORTS,
+    MANAGE_ALERTS,
+    MANAGE_SUPPORT,
+    MANAGE_BILLING,
+    MANAGE_ACCESS
+}

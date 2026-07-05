@@ -30,6 +30,7 @@ public record NotificationPreferenceResource(
         Boolean systemRecommendations,
         Boolean dailySummaryEnabled,
         Boolean weeklySummaryEnabled,
+        Boolean monthlyReportEnabled,
         String defaultDeliveryMode
 ) {
     public static NotificationPreferenceResource from(NotificationPreference preference) {
@@ -61,6 +62,7 @@ public record NotificationPreferenceResource(
                 preference.getSystemRecommendations(),
                 preference.getDailySummaryEnabled(),
                 preference.getWeeklySummaryEnabled(),
+                preference.getMonthlyReportEnabled(),
                 preference.getDefaultDeliveryMode() == null ? null : preference.getDefaultDeliveryMode().name()
         );
     }
