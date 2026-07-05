@@ -6,6 +6,7 @@ import com.electrocorp.electrocorpplatform.shared.infrastructure.security.Curren
 import com.electrocorp.electrocorpplatform.iam.interfaces.rest.resources.*;
 import com.electrocorp.electrocorpplatform.iam.interfaces.rest.transform.AuthResourceFromResultAssembler;
 import com.electrocorp.electrocorpplatform.iam.interfaces.rest.transform.RecoverPasswordCommandFromResourceAssembler;
+import com.electrocorp.electrocorpplatform.iam.interfaces.rest.transform.ResetPasswordCommandFromResourceAssembler;
 import com.electrocorp.electrocorpplatform.iam.interfaces.rest.transform.SignInCommandFromResourceAssembler;
 import com.electrocorp.electrocorpplatform.iam.interfaces.rest.transform.SignUpCommandFromResourceAssembler;
 import com.electrocorp.electrocorpplatform.iam.interfaces.rest.transform.UserResourceFromEntityAssembler;
@@ -44,6 +45,11 @@ public class AuthController {
     @PostMapping("/recover-password")
     public void recoverPassword(@Valid @RequestBody RecoverPasswordResource request) {
         authCommandService.recoverPassword(RecoverPasswordCommandFromResourceAssembler.toCommandFromResource(request));
+    }
+
+    @PostMapping("/reset-password")
+    public void resetPassword(@Valid @RequestBody ResetPasswordResource request) {
+        authCommandService.resetPassword(ResetPasswordCommandFromResourceAssembler.toCommandFromResource(request));
     }
 
     @GetMapping("/me")

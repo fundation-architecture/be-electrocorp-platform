@@ -8,6 +8,7 @@ import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.aggrega
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.repositories.EnergyReadingRepository;
 import com.electrocorp.electrocorpplatform.reporting.domain.model.commands.CreateConsumptionReportCommand;
 import com.electrocorp.electrocorpplatform.reporting.domain.model.commands.CreateEnergyGoalCommand;
+import com.electrocorp.electrocorpplatform.reporting.domain.model.commands.GenerateConsumptionReportCommand;
 import com.electrocorp.electrocorpplatform.reporting.domain.model.commands.RecordReportingEventCommand;
 import com.electrocorp.electrocorpplatform.reporting.domain.model.commands.UpdateEnergyGoalCommand;
 import com.electrocorp.electrocorpplatform.reporting.domain.model.aggregates.ConsumptionReport;
@@ -148,6 +149,15 @@ public class ReportingApplicationService {
         }
 
         return reportRepository.save(report);
+    }
+
+    @Transactional
+    public ConsumptionReport generateReport(GenerateConsumptionReportCommand command) {
+        return createReport(new CreateConsumptionReportCommand(
+                command.userId(),
+                command.startDate(),
+                command.endDate()
+        ));
     }
 
     private boolean isClosedReportCycle(LocalDate endDate) {

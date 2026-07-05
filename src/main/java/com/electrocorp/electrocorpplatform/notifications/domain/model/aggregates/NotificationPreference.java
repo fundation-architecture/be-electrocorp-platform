@@ -88,6 +88,9 @@ public class NotificationPreference extends AuditableEntity {
     @Column
     private Boolean weeklySummaryEnabled = false;
 
+    @Column
+    private Boolean monthlyReportEnabled = true;
+
     @Enumerated(EnumType.STRING)
     @Column(length = 30)
     private NotificationDeliveryMode defaultDeliveryMode = NotificationDeliveryMode.BANNER;

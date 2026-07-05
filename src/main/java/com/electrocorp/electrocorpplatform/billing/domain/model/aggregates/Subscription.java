@@ -47,11 +47,30 @@ public class Subscription extends AuditableEntity {
     }
 
     public boolean isActive() {
-        return status == SubscriptionStatus.ACTIVE;
+        if (status == SubscriptionStatus.ACTIVE) {
+            return true;
+        }
+
+        return status == SubscriptionStatus.CANCELLED
+                && endDate != null
+                && !endDate.isBefore(LocalDate.now());
     }
 
     public void cancel() {
         this.status = SubscriptionStatus.CANCELLED;
-        this.endDate = LocalDate.now();
+        this.endDate = currentBillingCycleEndDate(LocalDate.now());
+    }
+
+    private LocalDate currentBillingCycleEndDate(LocalDate today) {
+        if (startDate == null) {
+            return today;
+        }
+
+        LocalDate nextBillingDate = startDate.plusMonths(1);
+        while (!nextBillingDate.isAfter(today)) {
+            nextBillingDate = nextBillingDate.plusMonths(1);
+        }
+
+        return nextBillingDate.minusDays(1);
     }
 }

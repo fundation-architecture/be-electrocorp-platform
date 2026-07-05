@@ -2,7 +2,8 @@ package com.electrocorp.electrocorpplatform.reporting.interfaces.rest.controller
 
 import com.electrocorp.electrocorpplatform.reporting.application.services.PlatformInsightApplicationService;
 import com.electrocorp.electrocorpplatform.reporting.interfaces.rest.resources.PlatformSummaryResource;
-import com.electrocorp.electrocorpplatform.shared.infrastructure.security.CurrentUserProvider;
+import com.electrocorp.electrocorpplatform.iam.application.security.AccessAuthorizationService;
+import com.electrocorp.electrocorpplatform.iam.domain.model.AccessPermission;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -12,11 +13,13 @@ import org.springframework.web.bind.annotation.*;
 public class PlatformInsightController {
 
     private final PlatformInsightApplicationService platformInsightApplicationService;
-    private final CurrentUserProvider currentUserProvider;
+    private final AccessAuthorizationService accessAuthorizationService;
 
     @GetMapping("/summary")
     public PlatformSummaryResource getPlatformSummary() {
-        var summary = platformInsightApplicationService.getPlatformSummary(currentUserProvider.getCurrentUserId());
+        var summary = platformInsightApplicationService.getPlatformSummary(
+                accessAuthorizationService.requirePermission(AccessPermission.VIEW_REPORTS)
+        );
         return PlatformSummaryResource.from(summary);
     }
 }

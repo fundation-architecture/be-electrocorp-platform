@@ -18,7 +18,9 @@ import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.commands.D
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.commands.DeleteRoutineCommand;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.commands.ExecuteGroupActionCommand;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.commands.ExecuteRoutineCommand;
+import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.commands.PairDeviceCommand;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.commands.ToggleDeviceCommand;
+import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.commands.UpdateDeviceCommand;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.commands.UpdateDeviceGroupCommand;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.commands.UpdateDeviceStatusCommand;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.commands.UpdateRoutineStatusCommand;
@@ -33,6 +35,16 @@ public class DeviceControlCommandServiceImpl implements DeviceControlCommandServ
     @Override
     public Device handle(CreateDeviceCommand command) {
         return applicationService.createDevice(command);
+    }
+
+    @Override
+    public Device handle(PairDeviceCommand command) {
+        return applicationService.pairDevice(command);
+    }
+
+    @Override
+    public Device handle(UpdateDeviceCommand command) {
+        return applicationService.updateDevice(command);
     }
 
     @Override

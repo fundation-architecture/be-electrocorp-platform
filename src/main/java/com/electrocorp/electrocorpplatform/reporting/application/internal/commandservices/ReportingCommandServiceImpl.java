@@ -7,6 +7,7 @@ import com.electrocorp.electrocorpplatform.reporting.domain.model.aggregates.Ene
 import com.electrocorp.electrocorpplatform.reporting.domain.model.aggregates.ReportingEvent;
 import com.electrocorp.electrocorpplatform.reporting.domain.model.commands.CreateConsumptionReportCommand;
 import com.electrocorp.electrocorpplatform.reporting.domain.model.commands.CreateEnergyGoalCommand;
+import com.electrocorp.electrocorpplatform.reporting.domain.model.commands.GenerateConsumptionReportCommand;
 import com.electrocorp.electrocorpplatform.reporting.domain.model.commands.RecordReportingEventCommand;
 import com.electrocorp.electrocorpplatform.reporting.domain.model.commands.UpdateEnergyGoalCommand;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +21,11 @@ public class ReportingCommandServiceImpl implements ReportingCommandService {
     @Override
     public ConsumptionReport handle(CreateConsumptionReportCommand command) {
         return applicationService.createReport(command);
+    }
+
+    @Override
+    public ConsumptionReport handle(GenerateConsumptionReportCommand command) {
+        return applicationService.generateReport(command);
     }
 
     @Override
