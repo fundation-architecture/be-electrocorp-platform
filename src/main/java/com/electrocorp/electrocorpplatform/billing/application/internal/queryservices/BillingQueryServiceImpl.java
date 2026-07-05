@@ -5,6 +5,7 @@ import com.electrocorp.electrocorpplatform.billing.domain.model.aggregates.Invoi
 import com.electrocorp.electrocorpplatform.billing.domain.model.aggregates.Payment;
 import com.electrocorp.electrocorpplatform.billing.domain.model.aggregates.Plan;
 import com.electrocorp.electrocorpplatform.billing.domain.model.aggregates.Subscription;
+import com.electrocorp.electrocorpplatform.billing.domain.model.SubscriptionStatus;
 import com.electrocorp.electrocorpplatform.billing.domain.model.queries.GetAllPlansQuery;
 import com.electrocorp.electrocorpplatform.billing.domain.model.queries.GetCurrentSubscriptionQuery;
 import com.electrocorp.electrocorpplatform.billing.domain.model.queries.GetInvoicesByUserQuery;
@@ -38,10 +39,7 @@ public class BillingQueryServiceImpl implements BillingQueryService {
     @Override
     @Transactional(readOnly = true)
     public Optional<Subscription> handle(GetCurrentSubscriptionQuery query) {
-        return subscriptionRepository.findByUserId(query.userId())
-                .stream()
-                .filter(Subscription::isActive)
-                .findFirst();
+        return subscriptionRepository.findFirstByUserIdAndStatus(query.userId(), SubscriptionStatus.ACTIVE);
     }
 
     @Override

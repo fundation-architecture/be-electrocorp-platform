@@ -59,7 +59,7 @@ public class GlobalExceptionHandler {
                 .findFirst()
                 .map(fieldError -> fieldError.getField() + " " + fieldError.getDefaultMessage())
                 .orElse("Validation failed");
-        return error("VALIDATION_ERROR", message);
+        return error(new ApplicationError("VALIDATION_ERROR", message));
     }
 
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
