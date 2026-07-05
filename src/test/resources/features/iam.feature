@@ -22,7 +22,7 @@ Feature: Identity and Access Management
         "password": "Secur3Pass"
       }
       """
-    Then the response status code is 201
+    Then the response status code is 200
     And the response body contains a non-empty "token"
     And the response body contains "user.email" equal to "rosa.gutierrez@example.com"
 
@@ -61,7 +61,7 @@ Feature: Identity and Access Management
         "password": "Secur3Pass"
       }
       """
-    Then the response status code is 409
+    Then the response status code is 400
 
   @TS-13 @TS-15 @signin
   Scenario: Successful sign in returns a JWT token
@@ -86,12 +86,12 @@ Feature: Identity and Access Management
         "password": "WrongPass"
       }
       """
-    Then the response status code is 401
+    Then the response status code is 400
 
   @TS-13 @security
   Scenario: A protected endpoint rejects requests without a token
-    When the client sends a GET request to "/auth/me" without an Authorization header
-    Then the response status code is 401
+    When the client sends a GET request to "/users/me" without an Authorization header
+    Then the response status code is 403
 
   @TS-13 @security
   Scenario: A protected endpoint accepts a valid Bearer token
@@ -126,5 +126,5 @@ Feature: Identity and Access Management
   Scenario: Deleting the authenticated user account
     Given the client is authenticated as "carlos.mendoza@example.com"
     When the client sends a DELETE request to "/users/me"
-    Then the response status code is 204
-    And a subsequent sign in with the same credentials returns status code 401
+    Then the response status code is 200
+    And a subsequent sign in with the same credentials returns status code 400

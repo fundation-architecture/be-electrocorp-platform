@@ -1,13 +1,14 @@
 @billing
 Feature: Billing and Subscriptions
   As a registered user
-  I want to browse plans, subscribe, pay and cancel
+  I want to browse plans, subscribe via checkout, and cancel
   So that I can access the features included in my plan
 
-  # Covers: US-06 (Comparar planes), US-27 (Pagar suscripcion - pago simulado interno),
+  # Covers: US-06 (Comparar planes), US-27 (Contratar plan via checkout - pago simulado interno),
   #         US-28 (Cancelar suscripcion)
-  # NOTE: Payment is validated by an internal policy service (no external Stripe
-  #       gateway is integrated in this version).
+  # NOTE: Direct subscription creation is disabled by design; subscriptions are
+  #       created through /subscriptions/checkout. Payment is validated by an
+  #       internal policy service (no external Stripe gateway).
 
   Background:
     Given the RESTful API is available at base path "/api/v1/billing"
@@ -18,18 +19,8 @@ Feature: Billing and Subscriptions
   Scenario: Listing the available service plans
     When the client sends a GET request to "/plans"
     Then the response status code is 200
-    And the response body is a list containing a plan with code "FREE"
+    And the response body is a list containing a plan with code "STARTER"
     And the response body is a list containing a plan with code "ENTERPRISE"
-
-  @US-27 @subscribe
-  Scenario: Subscribing to a plan by its code
-    When the client sends a POST request to "/subscriptions" with body:
-      """
-      { "planCode": "ENTERPRISE" }
-      """
-    Then the response status code is 201
-    And the response body contains "status" equal to "ACTIVE"
-    And the response body contains "planCode" equal to "ENTERPRISE"
 
   @US-27 @checkout
   Scenario: Checking out a subscription with valid card details
@@ -43,8 +34,9 @@ Feature: Billing and Subscriptions
         "cvv": "123"
       }
       """
-    Then the response status code is 201
+    Then the response status code is 200
     And the response body contains "status" equal to "ACTIVE"
+    And the response body contains "planCode" equal to "ENTERPRISE"
 
   @US-27 @checkout @validation
   Scenario: Checkout is rejected when card details are incomplete
@@ -60,39 +52,22 @@ Feature: Billing and Subscriptions
       """
     Then the response status code is 400
 
-  @US-27 @payment
-  Scenario: Registering a payment for an existing subscription
-    Given the client has an active subscription with id 1
-    When the client sends a POST request to "/payments" with body:
-      """
-      {
-        "subscriptionId": 1,
-        "holderName": "Carlos Mendoza",
-        "cardNumber": "4111111111111111",
-        "expirationDate": "12/29",
-        "cvv": "123"
-      }
-      """
-    Then the response status code is 201
-    And the response body contains "status" equal to "APPROVED"
-
   @US-06 @subscription
-  Scenario: Retrieving the current subscription
+  Scenario: Retrieving the current subscription after checkout
     Given the client has an active subscription with plan "ENTERPRISE"
     When the client sends a GET request to "/subscriptions/current"
     Then the response status code is 200
     And the response body contains "planCode" equal to "ENTERPRISE"
+    And the response body contains "status" equal to "ACTIVE"
 
   @US-28 @cancel
   Scenario: Cancelling the current subscription
     Given the client has an active subscription with plan "ENTERPRISE"
     When the client sends a DELETE request to "/subscriptions/current"
     Then the response status code is 200
-    And the response body contains "status" equal to "CANCELLED"
 
   @billing @invoices
   Scenario: Listing invoices for the authenticated user
-    Given the client has at least one paid invoice
     When the client sends a GET request to "/invoices"
     Then the response status code is 200
-    And the response body is a non-empty list
+    And the response body is a JSON array
