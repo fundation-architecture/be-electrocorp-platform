@@ -2,20 +2,18 @@ package com.electrocorp.electrocorpplatform.acceptance;
 
 import io.cucumber.java.en.Given;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
+
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 
 /**
- * Business "Given" steps for the Billing feature. Authentication and the generic
- * HTTP steps are provided by {@link IamSteps} and {@link CommonHttpSteps}.
+ * Business "Given" steps for the Billing feature. Authentication is handled by
+ * {@link IamSteps} and the generic HTTP steps by {@link CommonHttpSteps}.
  */
 public class BillingSteps {
-
-    @Autowired
-    private TestRestTemplate rest;
 
     @Autowired
     private TestContext ctx;
@@ -23,40 +21,45 @@ public class BillingSteps {
     @LocalServerPort
     private int port;
 
-    private String url(String path) {
-        return "http://localhost:" + port + path;
-    }
+    private final HttpClient client = HttpClient.newHttpClient();
 
-    private HttpHeaders authJsonHeaders() {
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-        if (ctx.jwtToken != null) {
-            headers.setBearerAuth(ctx.jwtToken);
+    private void checkout(String planCode) {
+        try {
+            String body = ("{\"planCode\":\"%s\",\"holderName\":\"Carlos Mendoza\","
+                    + "\"cardNumber\":\"4111111111111111\",\"expirationDate\":\"12/29\","
+                    + "\"cvv\":\"123\"}").formatted(planCode);
+            HttpRequest.Builder builder = HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:" + port + "/api/v1/billing/subscriptions/checkout"))
+                    .header("Content-Type", "application/json");
+            if (ctx.jwtToken != null) {
+                builder.header("Authorization", "Bearer " + ctx.jwtToken);
+            }
+            HttpRequest req = builder
+                    .POST(HttpRequest.BodyPublishers.ofString(body))
+                    .build();
+            client.send(req, HttpResponse.BodyHandlers.ofString());
+        } catch (Exception e) {
+            throw new RuntimeException("HTTP request failed", e);
         }
-        return headers;
     }
 
     @Given("the billing plan catalog is initialized")
     public void theBillingPlanCatalogIsInitialized() {
-        // BillingPlanCatalogInitializer seeds the plans on application startup,
-        // so this is a no-op assertion placeholder for readability.
+        // BillingPlanCatalogInitializer seeds the plans on application startup.
     }
 
     @Given("the client has an active subscription with plan {string}")
     public void theClientHasAnActiveSubscriptionWithPlan(String planCode) {
-        String body = "{\"planCode\":\"%s\"}".formatted(planCode);
-        rest.postForEntity(url("/api/v1/billing/subscriptions"),
-                new HttpEntity<>(body, authJsonHeaders()), String.class);
+        checkout(planCode);
     }
 
     @Given("the client has an active subscription with id {long}")
     public void theClientHasAnActiveSubscriptionWithId(Long id) {
-        theClientHasAnActiveSubscriptionWithPlan("ENTERPRISE");
+        checkout("ENTERPRISE");
     }
 
     @Given("the client has at least one paid invoice")
     public void theClientHasAtLeastOnePaidInvoice() {
-        theClientHasAnActiveSubscriptionWithPlan("ENTERPRISE");
-        // A checkout/payment generates the invoice; extend here if your flow differs.
+        checkout("ENTERPRISE");
     }
 }

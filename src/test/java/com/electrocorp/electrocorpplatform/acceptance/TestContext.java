@@ -1,10 +1,12 @@
 package com.electrocorp.electrocorpplatform.acceptance;
 
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
+
+import java.net.http.HttpResponse;
 
 @Component
 public class TestContext {
     public String jwtToken;
-    public ResponseEntity<String> lastResponse;
+    public String lastAuthEmail;
+    public HttpResponse<String> lastResponse;
 }
