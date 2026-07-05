@@ -13,7 +13,7 @@ import java.math.BigDecimal;
 import java.util.List;
 
 @Component
-@Profile({"dev", "prod"})
+@Profile({"dev", "prod", "test"})
 @RequiredArgsConstructor
 public class BillingPlanCatalogInitializer implements ApplicationRunner {
 

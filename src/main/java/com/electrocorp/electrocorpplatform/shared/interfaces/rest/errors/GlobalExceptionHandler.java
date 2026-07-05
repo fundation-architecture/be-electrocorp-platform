@@ -11,6 +11,7 @@ import com.electrocorp.electrocorpplatform.shared.domain.exceptions.ResourceNotF
 import org.springframework.http.HttpStatus;
 import org.springframework.context.MessageSource;
 import org.springframework.context.i18n.LocaleContextHolder;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.*;
 
 @RestControllerAdvice
@@ -49,6 +50,16 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(IllegalArgumentException.class)
     public ErrorResource handleIllegalArgumentException(IllegalArgumentException exception) {
         return error(ApplicationError.badRequest(exception.getMessage()));
+    }
+
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ErrorResource handleValidationException(MethodArgumentNotValidException exception) {
+        String message = exception.getBindingResult().getFieldErrors().stream()
+                .findFirst()
+                .map(fieldError -> fieldError.getField() + " " + fieldError.getDefaultMessage())
+                .orElse("Validation failed");
+        return error("VALIDATION_ERROR", message);
     }
 
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
