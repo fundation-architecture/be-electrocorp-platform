@@ -8,11 +8,14 @@ import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.aggrega
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.repositories.EnergyReadingRepository;
 import com.electrocorp.electrocorpplatform.reporting.domain.model.commands.CreateConsumptionReportCommand;
 import com.electrocorp.electrocorpplatform.reporting.domain.model.commands.CreateEnergyGoalCommand;
+import com.electrocorp.electrocorpplatform.reporting.domain.model.commands.RecordReportingEventCommand;
 import com.electrocorp.electrocorpplatform.reporting.domain.model.commands.UpdateEnergyGoalCommand;
 import com.electrocorp.electrocorpplatform.reporting.domain.model.aggregates.ConsumptionReport;
 import com.electrocorp.electrocorpplatform.reporting.domain.model.aggregates.EnergyGoal;
+import com.electrocorp.electrocorpplatform.reporting.domain.model.aggregates.ReportingEvent;
 import com.electrocorp.electrocorpplatform.reporting.domain.repositories.ConsumptionReportRepository;
 import com.electrocorp.electrocorpplatform.reporting.domain.repositories.EnergyGoalRepository;
+import com.electrocorp.electrocorpplatform.reporting.domain.repositories.ReportingEventRepository;
 import com.electrocorp.electrocorpplatform.reporting.domain.services.ConsumptionReportPolicyService;
 import com.electrocorp.electrocorpplatform.workplace.domain.model.aggregates.DeviceAssignment;
 import com.electrocorp.electrocorpplatform.workplace.domain.model.aggregates.Room;
@@ -26,6 +29,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.HashSet;
 import java.util.Set;
@@ -38,6 +42,7 @@ public class ReportingApplicationService {
 
     private final ConsumptionReportRepository reportRepository;
     private final EnergyGoalRepository goalRepository;
+    private final ReportingEventRepository reportingEventRepository;
     private final EnergyReadingRepository energyReadingRepository;
     private final DeviceGroupDeviceRepository deviceGroupDeviceRepository;
     private final DeviceAssignmentRepository deviceAssignmentRepository;
@@ -46,6 +51,30 @@ public class ReportingApplicationService {
     private final LocationRepository locationRepository;
     private final RoomRepository roomRepository;
     private final ConsumptionReportPolicyService reportPolicyService;
+
+    @Transactional(readOnly = true)
+    public List<ReportingEvent> getEvents(Long userId) {
+        return reportingEventRepository.findTop50ByUserIdOrderByOccurredOnDescIdDesc(userId);
+    }
+
+    @Transactional
+    public ReportingEvent recordEvent(RecordReportingEventCommand command) {
+        LocalDateTime occurredOn = command.occurredOn() != null ? command.occurredOn() : LocalDateTime.now();
+        String eventKey = buildEventKey(command, occurredOn);
+
+        return reportingEventRepository.findByEventKey(eventKey)
+                .orElseGet(() -> reportingEventRepository.save(new ReportingEvent(
+                        command.userId(),
+                        eventKey,
+                        normalize(command.eventName(), "UNKNOWN_EVENT", 120),
+                        normalize(command.sourceContext(), "UNKNOWN", 80),
+                        normalize(command.subjectType(), "SYSTEM", 80),
+                        normalizeNullable(command.subjectId(), 80),
+                        normalize(command.summary(), "Platform activity recorded.", 240),
+                        normalizeNullable(command.detail(), 800),
+                        occurredOn
+                )));
+    }
 
     @Transactional(readOnly = true)
     public List<ConsumptionReport> getReports(Long userId) {
@@ -353,5 +382,28 @@ public class ReportingApplicationService {
         }
 
         return value.divide(BigDecimal.valueOf(1000), 6, RoundingMode.HALF_UP).stripTrailingZeros();
+    }
+
+    private String buildEventKey(RecordReportingEventCommand command, LocalDateTime occurredOn) {
+        return String.join(
+                ":",
+                normalize(command.sourceContext(), "UNKNOWN", 40),
+                normalize(command.eventName(), "UNKNOWN_EVENT", 80),
+                normalize(command.subjectType(), "SYSTEM", 40),
+                normalize(command.subjectId(), "N/A", 60),
+                occurredOn.toString()
+        );
+    }
+
+    private String normalize(String value, String fallback, int maxLength) {
+        String normalized = value == null || value.isBlank() ? fallback : value.trim();
+        return normalized.length() <= maxLength ? normalized : normalized.substring(0, maxLength);
+    }
+
+    private String normalizeNullable(String value, int maxLength) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim().length() <= maxLength ? value.trim() : value.trim().substring(0, maxLength);
     }
 }

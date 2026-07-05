@@ -13,6 +13,7 @@ import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.DeviceStat
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.OperationModeStatus;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.RoutineAction;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.aggregates.Routine;
+import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.events.DeviceCreatedEvent;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.events.OperationModeActivatedEvent;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.repositories.DeviceGroupDeviceRepository;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.repositories.DeviceGroupRepository;
@@ -250,7 +251,14 @@ public class DeviceControlApplicationService {
         device.setPowerWatts(command.powerWatts());
         device.setStatus(DeviceStatus.OFF);
 
-        return deviceRepository.save(device);
+        Device savedDevice = deviceRepository.save(device);
+        domainEventPublisher.publish(new DeviceCreatedEvent(
+                command.userId(),
+                savedDevice.getId(),
+                savedDevice.getName()
+        ));
+
+        return savedDevice;
     }
 
     @Transactional

@@ -1,6 +1,7 @@
 package com.electrocorp.electrocorpplatform.workplace.interfaces.rest.controllers;
 
-import com.electrocorp.electrocorpplatform.workplace.application.services.WorkplaceApplicationService;
+import com.electrocorp.electrocorpplatform.workplace.application.commandservices.WorkplaceCommandService;
+import com.electrocorp.electrocorpplatform.workplace.application.queryservices.WorkplaceQueryService;
 import com.electrocorp.electrocorpplatform.workplace.interfaces.rest.resources.*;
 import com.electrocorp.electrocorpplatform.workplace.interfaces.rest.transform.AssignDeviceCommandFromResourceAssembler;
 import com.electrocorp.electrocorpplatform.workplace.interfaces.rest.transform.CreateLocationCommandFromResourceAssembler;
@@ -20,12 +21,13 @@ import java.util.List;
 @RequiredArgsConstructor
 public class WorkplaceController {
 
-    private final WorkplaceApplicationService service;
+    private final WorkplaceCommandService commandService;
+    private final WorkplaceQueryService queryService;
     private final CurrentUserProvider currentUserProvider;
 
     @GetMapping("/locations")
     public List<LocationResource> getLocations() {
-        return service.getLocations(currentUserProvider.getCurrentUserId())
+        return queryService.getLocations(currentUserProvider.getCurrentUserId())
                 .stream()
                 .map(LocationResourceFromEntityAssembler::toResourceFromEntity)
                 .toList();
@@ -34,7 +36,7 @@ public class WorkplaceController {
     @PostMapping("/locations")
     public LocationResource createLocation(@Valid @RequestBody CreateLocationResource request) {
         return LocationResourceFromEntityAssembler.toResourceFromEntity(
-                service.createLocation(CreateLocationCommandFromResourceAssembler.toCommandFromResource(request, currentUserProvider.getCurrentUserId()))
+                commandService.createLocation(CreateLocationCommandFromResourceAssembler.toCommandFromResource(request, currentUserProvider.getCurrentUserId()))
         );
     }
 
@@ -43,8 +45,8 @@ public class WorkplaceController {
             @RequestParam(required = false) Long locationId
     ) {
         List<com.electrocorp.electrocorpplatform.workplace.domain.model.aggregates.Room> rooms = locationId != null
-                ? service.getRooms(currentUserProvider.getCurrentUserId(), locationId)
-                : service.getRoomsByUserId(currentUserProvider.getCurrentUserId());
+                ? queryService.getRooms(currentUserProvider.getCurrentUserId(), locationId)
+                : queryService.getRoomsByUserId(currentUserProvider.getCurrentUserId());
 
         return rooms
                 .stream()
@@ -55,7 +57,7 @@ public class WorkplaceController {
     @PostMapping("/rooms")
     public RoomResource createRoom(@Valid @RequestBody CreateRoomResource request) {
         return RoomResourceFromEntityAssembler.toResourceFromEntity(
-                service.createRoom(currentUserProvider.getCurrentUserId(), CreateRoomCommandFromResourceAssembler.toCommandFromResource(request))
+                commandService.createRoom(currentUserProvider.getCurrentUserId(), CreateRoomCommandFromResourceAssembler.toCommandFromResource(request))
         );
     }
 
@@ -65,10 +67,10 @@ public class WorkplaceController {
             @RequestParam(required = false) Long deviceId
     ) {
         List<com.electrocorp.electrocorpplatform.workplace.domain.model.aggregates.DeviceAssignment> assignments = deviceId != null
-                ? service.getAssignmentsByDeviceId(currentUserProvider.getCurrentUserId(), deviceId)
+                ? queryService.getAssignmentsByDeviceId(currentUserProvider.getCurrentUserId(), deviceId)
                 : locationId != null
-                ? service.getAssignments(currentUserProvider.getCurrentUserId(), locationId)
-                : service.getAssignmentsByUserId(currentUserProvider.getCurrentUserId());
+                ? queryService.getAssignments(currentUserProvider.getCurrentUserId(), locationId)
+                : queryService.getAssignmentsByUserId(currentUserProvider.getCurrentUserId());
 
         return assignments
                 .stream()
@@ -79,7 +81,7 @@ public class WorkplaceController {
     @PostMapping("/device-assignments")
     public DeviceAssignmentResource assignDevice(@Valid @RequestBody AssignDeviceResource request) {
         return DeviceAssignmentResourceFromEntityAssembler.toResourceFromEntity(
-                service.assignDevice(currentUserProvider.getCurrentUserId(), AssignDeviceCommandFromResourceAssembler.toCommandFromResource(request))
+                commandService.assignDevice(currentUserProvider.getCurrentUserId(), AssignDeviceCommandFromResourceAssembler.toCommandFromResource(request))
         );
     }
 
@@ -89,13 +91,13 @@ public class WorkplaceController {
             @RequestBody UpdateLocationResource request
     ) {
         return LocationResourceFromEntityAssembler.toResourceFromEntity(
-                service.updateLocation(currentUserProvider.getCurrentUserId(), locationId, request.name(), request.address(), request.type())
+                commandService.updateLocation(currentUserProvider.getCurrentUserId(), locationId, request.name(), request.address(), request.type())
         );
     }
 
     @DeleteMapping("/locations/{locationId}")
     public void deleteLocation(@PathVariable Long locationId) {
-        service.deleteLocation(currentUserProvider.getCurrentUserId(), locationId);
+        commandService.deleteLocation(currentUserProvider.getCurrentUserId(), locationId);
     }
 
     @PatchMapping("/rooms/{roomId}")
@@ -104,13 +106,13 @@ public class WorkplaceController {
             @RequestBody UpdateRoomResource request
     ) {
         return RoomResourceFromEntityAssembler.toResourceFromEntity(
-                service.updateRoom(currentUserProvider.getCurrentUserId(), roomId, request.locationId(), request.name(), request.floor())
+                commandService.updateRoom(currentUserProvider.getCurrentUserId(), roomId, request.locationId(), request.name(), request.floor())
         );
     }
 
     @DeleteMapping("/rooms/{roomId}")
     public void deleteRoom(@PathVariable Long roomId) {
-        service.deleteRoom(currentUserProvider.getCurrentUserId(), roomId);
+        commandService.deleteRoom(currentUserProvider.getCurrentUserId(), roomId);
     }
 
     @PatchMapping("/device-assignments/{assignmentId}")
@@ -119,12 +121,12 @@ public class WorkplaceController {
             @RequestBody MoveDeviceAssignmentResource request
     ) {
         return DeviceAssignmentResourceFromEntityAssembler.toResourceFromEntity(
-                service.moveAssignment(currentUserProvider.getCurrentUserId(), assignmentId, request.locationId(), request.roomId())
+                commandService.moveAssignment(currentUserProvider.getCurrentUserId(), assignmentId, request.locationId(), request.roomId())
         );
     }
 
     @DeleteMapping("/device-assignments/{assignmentId}")
     public void deleteAssignment(@PathVariable Long assignmentId) {
-        service.deleteAssignment(currentUserProvider.getCurrentUserId(), assignmentId);
+        commandService.deleteAssignment(currentUserProvider.getCurrentUserId(), assignmentId);
     }
 }

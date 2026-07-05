@@ -1,6 +1,7 @@
 package com.electrocorp.electrocorpplatform.servicemanagement.interfaces.rest.controllers;
 
-import com.electrocorp.electrocorpplatform.servicemanagement.application.services.ServiceManagementApplicationService;
+import com.electrocorp.electrocorpplatform.servicemanagement.application.commandservices.ServiceManagementCommandService;
+import com.electrocorp.electrocorpplatform.servicemanagement.application.queryservices.ServiceManagementQueryService;
 import com.electrocorp.electrocorpplatform.servicemanagement.domain.model.commands.DeleteMaintenanceTicketCommand;
 import com.electrocorp.electrocorpplatform.servicemanagement.domain.model.commands.DeleteSupportTicketCommand;
 import com.electrocorp.electrocorpplatform.servicemanagement.interfaces.rest.resources.*;
@@ -17,12 +18,13 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ServiceManagementController {
 
-    private final ServiceManagementApplicationService service;
+    private final ServiceManagementCommandService commandService;
+    private final ServiceManagementQueryService queryService;
     private final CurrentUserProvider currentUserProvider;
 
     @GetMapping("/support-tickets")
     public List<SupportTicketResource> getSupportTickets() {
-        return service.getSupportTickets(currentUserProvider.getCurrentUserId()).stream()
+        return queryService.getSupportTickets(currentUserProvider.getCurrentUserId()).stream()
                 .map(SupportTicketResourceFromEntityAssembler::toResourceFromEntity)
                 .toList();
     }
@@ -30,25 +32,25 @@ public class ServiceManagementController {
     @PostMapping("/support-tickets")
     public SupportTicketResource createSupportTicket(@Valid @RequestBody CreateSupportTicketResource request) {
         var command = CreateSupportTicketCommandFromResourceAssembler.toCommandFromResource(request, currentUserProvider.getCurrentUserId());
-        var ticket = service.createSupportTicket(command);
+        var ticket = commandService.createSupportTicket(command);
         return SupportTicketResourceFromEntityAssembler.toResourceFromEntity(ticket);
     }
 
     @PatchMapping("/support-tickets/{ticketId}/status")
     public SupportTicketResource updateSupportStatus(@PathVariable Long ticketId, @Valid @RequestBody UpdateTicketStatusResource request) {
         var command = UpdateTicketStatusCommandFromResourceAssembler.toCommandFromResource(request);
-        var ticket = service.updateSupportStatus(currentUserProvider.getCurrentUserId(), ticketId, command);
+        var ticket = commandService.updateSupportStatus(currentUserProvider.getCurrentUserId(), ticketId, command);
         return SupportTicketResourceFromEntityAssembler.toResourceFromEntity(ticket);
     }
 
     @DeleteMapping("/support-tickets/{ticketId}")
     public void deleteSupportTicket(@PathVariable Long ticketId) {
-        service.deleteSupportTicket(new DeleteSupportTicketCommand(currentUserProvider.getCurrentUserId(), ticketId));
+        commandService.deleteSupportTicket(new DeleteSupportTicketCommand(currentUserProvider.getCurrentUserId(), ticketId));
     }
 
     @GetMapping("/maintenance-tickets")
     public List<MaintenanceTicketResource> getMaintenanceTickets() {
-        return service.getMaintenanceTickets(currentUserProvider.getCurrentUserId()).stream()
+        return queryService.getMaintenanceTickets(currentUserProvider.getCurrentUserId()).stream()
                 .map(MaintenanceTicketResourceFromEntityAssembler::toResourceFromEntity)
                 .toList();
     }
@@ -56,19 +58,19 @@ public class ServiceManagementController {
     @PostMapping("/maintenance-tickets")
     public MaintenanceTicketResource createMaintenanceTicket(@Valid @RequestBody CreateMaintenanceTicketResource request) {
         var command = CreateMaintenanceTicketCommandFromResourceAssembler.toCommandFromResource(request, currentUserProvider.getCurrentUserId());
-        var ticket = service.createMaintenanceTicket(command);
+        var ticket = commandService.createMaintenanceTicket(command);
         return MaintenanceTicketResourceFromEntityAssembler.toResourceFromEntity(ticket);
     }
 
     @PatchMapping("/maintenance-tickets/{ticketId}/status")
     public MaintenanceTicketResource updateMaintenanceStatus(@PathVariable Long ticketId, @Valid @RequestBody UpdateTicketStatusResource request) {
         var command = UpdateTicketStatusCommandFromResourceAssembler.toCommandFromResource(request);
-        var ticket = service.updateMaintenanceStatus(currentUserProvider.getCurrentUserId(), ticketId, command);
+        var ticket = commandService.updateMaintenanceStatus(currentUserProvider.getCurrentUserId(), ticketId, command);
         return MaintenanceTicketResourceFromEntityAssembler.toResourceFromEntity(ticket);
     }
 
     @DeleteMapping("/maintenance-tickets/{ticketId}")
     public void deleteMaintenanceTicket(@PathVariable Long ticketId) {
-        service.deleteMaintenanceTicket(new DeleteMaintenanceTicketCommand(currentUserProvider.getCurrentUserId(), ticketId));
+        commandService.deleteMaintenanceTicket(new DeleteMaintenanceTicketCommand(currentUserProvider.getCurrentUserId(), ticketId));
     }
 }
