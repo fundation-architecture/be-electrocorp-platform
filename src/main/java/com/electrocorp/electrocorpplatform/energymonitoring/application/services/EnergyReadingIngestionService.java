@@ -4,13 +4,10 @@ import com.electrocorp.electrocorpplatform.devicecontrol.application.facades.Dev
 import com.electrocorp.electrocorpplatform.devicecontrol.application.facades.DeviceSnapshot;
 import com.electrocorp.electrocorpplatform.energymonitoring.application.ports.ConsumptionSummaryCache;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.factories.EnergyReadingFactory;
-import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.EnergyReadingStatus;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.aggregates.EnergyReading;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.commands.CreateEnergyReadingCommand;
-import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.events.EnergyThresholdExceededEvent;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.repositories.EnergyReadingRepository;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.services.EnergyCostCalculator;
-import com.electrocorp.electrocorpplatform.shared.application.events.DomainEventPublisher;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,11 +23,10 @@ import java.time.LocalDateTime;
 @RequiredArgsConstructor
 public class EnergyReadingIngestionService {
 
-    private final EnergyReadingFactory energyReadingFactory = new EnergyReadingFactory();
-
     private final EnergyReadingRepository energyReadingRepository;
     private final DeviceControlContextFacade deviceControlContextFacade;
-    private final DomainEventPublisher domainEventPublisher;
+    private final EnergyReadingFactory energyReadingFactory;
+    private final EnergyThresholdMonitor energyThresholdMonitor;
     private final ConsumptionSummaryCache consumptionSummaryCache;
     private final EnergyCostCalculator energyCostCalculator;
 
@@ -53,17 +49,7 @@ public class EnergyReadingIngestionService {
         );
         EnergyReading savedReading = energyReadingRepository.save(reading);
         consumptionSummaryCache.evict(savedReading.getUserId());
-        publishThresholdExceededIfNeeded(savedReading);
+        energyThresholdMonitor.publishIfExceeded(savedReading);
         return savedReading;
-    }
-
-    private void publishThresholdExceededIfNeeded(EnergyReading reading) {
-        if (reading != null && reading.getStatus() == EnergyReadingStatus.HIGH) {
-            domainEventPublisher.publish(new EnergyThresholdExceededEvent(
-                    reading.getUserId(),
-                    reading.getDeviceId(),
-                    reading.getWatts()
-            ));
-        }
     }
 }

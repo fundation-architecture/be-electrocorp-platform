@@ -22,6 +22,13 @@ del informe.
 | `reporting.feature`         | Reporting            | US-16, US-18, US-25, US-37                            |
 | `workplace.feature`         | Workplace            | US-25, US-38, US-40                                   |
 | `service-management.feature`| Service Management   | Gestión de servicios y soporte                        |
+| `energy-monitoring-us-13-consumo-actual.feature` | Energy Monitoring | US-13 (Sprint 2) |
+| `energy-monitoring-us-16-costo-soles.feature` | Energy Monitoring | US-16 (Sprint 2) |
+| `energy-monitoring-us-18-proyeccion-mensual.feature` | Energy Monitoring | US-18 (Sprint 2) |
+| `notifications-us-20-consumo-elevado.feature` | Notifications | US-20 (Sprint 2) |
+
+Los escenarios del Sprint 2 están escritos en español (`# language: es`), llevan la etiqueta
+`@sprint-2` y se ejecutan junto con `@iam` y `@billing` desde `CucumberRunnerTest`.
 
 ## Notas de fidelidad (importante)
 

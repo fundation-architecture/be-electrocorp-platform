@@ -8,7 +8,8 @@ import com.electrocorp.electrocorpplatform.energymonitoring.domain.repositories.
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.services.CurrentConsumptionService;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.services.EnergyCostCalculator;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.services.MonthlyCostProjectionService;
-import com.electrocorp.electrocorpplatform.notifications.domain.repositories.AlertRepository;
+import com.electrocorp.electrocorpplatform.notifications.application.facades.ActiveAlertsOverview;
+import com.electrocorp.electrocorpplatform.notifications.application.facades.NotificationsContextFacade;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -32,11 +33,11 @@ class EnergyQuerySideEffectFreeTest {
 
     private final EnergyReadingRepository energyReadingRepository = mock(EnergyReadingRepository.class);
     private final DeviceControlContextFacade deviceControlContextFacade = mock(DeviceControlContextFacade.class);
-    private final AlertRepository alertRepository = mock(AlertRepository.class);
+    private final NotificationsContextFacade notificationsContextFacade = userId -> ActiveAlertsOverview.empty();
     private final EnergyMonitoringApplicationService queryService = new EnergyMonitoringApplicationService(
             energyReadingRepository,
             deviceControlContextFacade,
-            alertRepository,
+            notificationsContextFacade,
             new CurrentConsumptionService(),
             new NoOpConsumptionSummaryCache(),
             new EnergyCostCalculator(new ConfigurableTariffProvider(new BigDecimal("0.75"))),

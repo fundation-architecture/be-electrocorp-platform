@@ -4,14 +4,11 @@ import com.electrocorp.electrocorpplatform.devicecontrol.application.facades.Dev
 import com.electrocorp.electrocorpplatform.energymonitoring.application.ports.ConsumptionSummaryCache;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.factories.EnergyReadingFactory;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.EnergyDeviceUsageState;
-import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.EnergyReadingStatus;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.aggregates.EnergyReading;
-import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.events.EnergyThresholdExceededEvent;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.repositories.EnergyDeviceUsageStateRepository;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.repositories.EnergyReadingRepository;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.services.EnergyConsumptionSimulatorService;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.services.EnergyCostCalculator;
-import com.electrocorp.electrocorpplatform.shared.application.events.DomainEventPublisher;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -26,12 +23,11 @@ import java.time.LocalDateTime;
 public class EnergyReadingRecorderService {
 
     private static final int MAX_SAMPLE_SECONDS = 3600;
-    private final EnergyReadingFactory energyReadingFactory = new EnergyReadingFactory();
-
     private final EnergyDeviceUsageStateRepository usageStateRepository;
     private final EnergyReadingRepository energyReadingRepository;
     private final EnergyConsumptionSimulatorService simulatorService;
-    private final DomainEventPublisher domainEventPublisher;
+    private final EnergyReadingFactory energyReadingFactory;
+    private final EnergyThresholdMonitor energyThresholdMonitor;
     private final ConsumptionSummaryCache consumptionSummaryCache;
     private final EnergyCostCalculator energyCostCalculator;
 
@@ -166,7 +162,7 @@ public class EnergyReadingRecorderService {
             );
 
             savedReading = energyReadingRepository.save(reading);
-            publishThresholdExceededIfNeeded(savedReading);
+            energyThresholdMonitor.publishIfExceeded(savedReading);
             remainingSeconds -= sampleSeconds;
         }
 
@@ -185,17 +181,4 @@ public class EnergyReadingRecorderService {
     private BigDecimal calculateWatts(DeviceSnapshot device) {
         return simulatorService.simulateWatts(device.powerWatts());
     }
-
-    private void publishThresholdExceededIfNeeded(EnergyReading reading) {
-        if (reading == null || reading.getWatts() == null || reading.getStatus() != EnergyReadingStatus.HIGH) {
-            return;
-        }
-
-        domainEventPublisher.publish(new EnergyThresholdExceededEvent(
-                reading.getUserId(),
-                reading.getDeviceId(),
-                reading.getWatts()
-        ));
-    }
-
 }

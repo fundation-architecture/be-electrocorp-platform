@@ -13,7 +13,15 @@ import java.time.LocalDateTime;
 
 public class EnergyReadingFactory {
 
-    private final HighConsumptionSpecification highConsumptionSpecification = new HighConsumptionSpecification();
+    private final HighConsumptionSpecification highConsumptionSpecification;
+
+    public EnergyReadingFactory() {
+        this(new HighConsumptionSpecification());
+    }
+
+    public EnergyReadingFactory(HighConsumptionSpecification highConsumptionSpecification) {
+        this.highConsumptionSpecification = highConsumptionSpecification;
+    }
 
     public EnergyReading create(
             Long userId,

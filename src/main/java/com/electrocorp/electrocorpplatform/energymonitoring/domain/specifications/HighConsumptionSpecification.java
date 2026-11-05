@@ -17,6 +17,10 @@ public class HighConsumptionSpecification {
         this.threshold = new EnergyThreshold(thresholdWatts);
     }
 
+    public BigDecimal thresholdWatts() {
+        return threshold.watts().value();
+    }
+
     public boolean isSatisfiedBy(BigDecimal watts) {
         return threshold.isExceededBy(new Watts(watts));
     }
