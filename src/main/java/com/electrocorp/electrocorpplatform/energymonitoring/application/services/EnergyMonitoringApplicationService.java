@@ -117,6 +117,7 @@ public class EnergyMonitoringApplicationService {
                 currentWatts,
                 todayKilowattHours,
                 todayEstimatedCost,
+                monthToDateCost,
                 projectedMonthlyCost,
                 costPerHour,
                 peakWatts,
