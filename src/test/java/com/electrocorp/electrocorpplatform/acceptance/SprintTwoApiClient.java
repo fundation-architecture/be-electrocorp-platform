@@ -54,6 +54,12 @@ public class SprintTwoApiClient {
                 "{\"deviceId\":%d,\"deviceName\":\"%s\",\"watts\":%d}".formatted(deviceId, deviceName, watts));
     }
 
+    public HttpResponse<String> registerReading(String token, Long deviceId, String deviceName, int watts, int sampleSeconds) {
+        return send("POST", "/api/v1/energy-readings", token,
+                "{\"deviceId\":%d,\"deviceName\":\"%s\",\"watts\":%d,\"sampleSeconds\":%d}"
+                        .formatted(deviceId, deviceName, watts, sampleSeconds));
+    }
+
     public HttpResponse<String> get(String token, String path) {
         return send("GET", path, token, null);
     }
