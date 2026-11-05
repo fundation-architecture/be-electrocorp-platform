@@ -6,6 +6,7 @@ import com.electrocorp.electrocorpplatform.energymonitoring.infrastructure.cache
 import com.electrocorp.electrocorpplatform.energymonitoring.infrastructure.tariff.ConfigurableTariffProvider;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.repositories.EnergyReadingRepository;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.services.CurrentConsumptionService;
+import com.electrocorp.electrocorpplatform.energymonitoring.domain.services.EnergyCostCalculator;
 import com.electrocorp.electrocorpplatform.notifications.domain.repositories.AlertRepository;
 import org.junit.jupiter.api.Test;
 
@@ -37,7 +38,7 @@ class EnergyQuerySideEffectFreeTest {
             alertRepository,
             new CurrentConsumptionService(),
             new NoOpConsumptionSummaryCache(),
-            new ConfigurableTariffProvider(new BigDecimal("0.75"))
+            new EnergyCostCalculator(new ConfigurableTariffProvider(new BigDecimal("0.75")))
     );
 
     @Test

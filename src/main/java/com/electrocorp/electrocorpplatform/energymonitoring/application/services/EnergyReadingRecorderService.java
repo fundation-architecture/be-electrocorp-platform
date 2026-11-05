@@ -10,7 +10,7 @@ import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.events.
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.repositories.EnergyDeviceUsageStateRepository;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.repositories.EnergyReadingRepository;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.services.EnergyConsumptionSimulatorService;
-import com.electrocorp.electrocorpplatform.energymonitoring.domain.services.TariffProvider;
+import com.electrocorp.electrocorpplatform.energymonitoring.domain.services.EnergyCostCalculator;
 import com.electrocorp.electrocorpplatform.shared.application.events.DomainEventPublisher;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -18,7 +18,6 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.Duration;
 import java.time.LocalDateTime;
 
@@ -34,7 +33,7 @@ public class EnergyReadingRecorderService {
     private final EnergyConsumptionSimulatorService simulatorService;
     private final DomainEventPublisher domainEventPublisher;
     private final ConsumptionSummaryCache consumptionSummaryCache;
-    private final TariffProvider tariffProvider;
+    private final EnergyCostCalculator energyCostCalculator;
 
     @Transactional
     public void recordStatusTransition(DeviceSnapshot device, boolean wasActive) {
@@ -153,7 +152,7 @@ public class EnergyReadingRecorderService {
             int sampleSeconds = (int) Math.min(MAX_SAMPLE_SECONDS, remainingSeconds);
             cursor = cursor.plusSeconds(sampleSeconds);
 
-            BigDecimal kilowattHours = calculateKilowattHours(watts, sampleSeconds);
+            BigDecimal kilowattHours = energyCostCalculator.kilowattHoursOf(watts, sampleSeconds);
 
             EnergyReading reading = energyReadingFactory.create(
                     device.userId(),
@@ -161,7 +160,7 @@ public class EnergyReadingRecorderService {
                     device.name(),
                     watts,
                     kilowattHours,
-                    calculateEstimatedCost(kilowattHours),
+                    energyCostCalculator.preciseCostOf(kilowattHours),
                     sampleSeconds,
                     cursor
             );
@@ -185,23 +184,6 @@ public class EnergyReadingRecorderService {
 
     private BigDecimal calculateWatts(DeviceSnapshot device) {
         return simulatorService.simulateWatts(device.powerWatts());
-    }
-
-    private BigDecimal calculateKilowattHours(BigDecimal watts, int sampleSeconds) {
-        if (sampleSeconds <= 0) {
-            return BigDecimal.ZERO.setScale(6, RoundingMode.HALF_UP);
-        }
-
-        return watts
-                .divide(BigDecimal.valueOf(1000), 10, RoundingMode.HALF_UP)
-                .multiply(BigDecimal.valueOf(sampleSeconds))
-                .divide(BigDecimal.valueOf(3600), 6, RoundingMode.HALF_UP);
-    }
-
-    private BigDecimal calculateEstimatedCost(BigDecimal kilowattHours) {
-        return kilowattHours
-                .multiply(tariffProvider.tariffPerKilowattHour())
-                .setScale(6, RoundingMode.HALF_UP);
     }
 
     private void publishThresholdExceededIfNeeded(EnergyReading reading) {

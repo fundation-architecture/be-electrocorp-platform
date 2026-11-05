@@ -9,7 +9,8 @@ public class CreateEnergyReadingCommandFromResourceAssembler {
                 userId,
                 resource.deviceId(),
                 resource.deviceName(),
-                resource.watts()
+                resource.watts(),
+                resource.sampleSeconds()
         );
     }
 }
