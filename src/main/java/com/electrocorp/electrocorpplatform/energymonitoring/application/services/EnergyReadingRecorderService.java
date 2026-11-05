@@ -10,6 +10,7 @@ import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.events.
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.repositories.EnergyDeviceUsageStateRepository;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.repositories.EnergyReadingRepository;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.services.EnergyConsumptionSimulatorService;
+import com.electrocorp.electrocorpplatform.energymonitoring.domain.services.TariffProvider;
 import com.electrocorp.electrocorpplatform.shared.application.events.DomainEventPublisher;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -25,7 +26,6 @@ import java.time.LocalDateTime;
 @RequiredArgsConstructor
 public class EnergyReadingRecorderService {
 
-    private static final BigDecimal DEFAULT_TARIFF_PER_KWH = BigDecimal.valueOf(0.75);
     private static final int MAX_SAMPLE_SECONDS = 3600;
     private final EnergyReadingFactory energyReadingFactory = new EnergyReadingFactory();
 
@@ -34,6 +34,7 @@ public class EnergyReadingRecorderService {
     private final EnergyConsumptionSimulatorService simulatorService;
     private final DomainEventPublisher domainEventPublisher;
     private final ConsumptionSummaryCache consumptionSummaryCache;
+    private final TariffProvider tariffProvider;
 
     @Transactional
     public void recordStatusTransition(DeviceSnapshot device, boolean wasActive) {
@@ -199,7 +200,7 @@ public class EnergyReadingRecorderService {
 
     private BigDecimal calculateEstimatedCost(BigDecimal kilowattHours) {
         return kilowattHours
-                .multiply(DEFAULT_TARIFF_PER_KWH)
+                .multiply(tariffProvider.tariffPerKilowattHour())
                 .setScale(6, RoundingMode.HALF_UP);
     }
 

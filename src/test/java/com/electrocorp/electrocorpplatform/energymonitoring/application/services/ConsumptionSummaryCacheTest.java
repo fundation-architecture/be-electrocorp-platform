@@ -8,6 +8,7 @@ import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.command
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.repositories.EnergyReadingRepository;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.services.CurrentConsumptionService;
 import com.electrocorp.electrocorpplatform.energymonitoring.infrastructure.cache.RedisConsumptionSummaryCache;
+import com.electrocorp.electrocorpplatform.energymonitoring.infrastructure.tariff.ConfigurableTariffProvider;
 import com.electrocorp.electrocorpplatform.energymonitoring.interfaces.rest.resources.EnergyDashboardSummaryResource;
 import com.electrocorp.electrocorpplatform.notifications.domain.repositories.AlertRepository;
 import com.electrocorp.electrocorpplatform.shared.application.events.DomainEventPublisher;
@@ -119,7 +120,8 @@ class ConsumptionSummaryCacheTest {
                 deviceControlContextFacade,
                 alertRepository,
                 new CurrentConsumptionService(),
-                summaryCache
+                summaryCache,
+                new ConfigurableTariffProvider(new BigDecimal("0.75"))
         );
     }
 

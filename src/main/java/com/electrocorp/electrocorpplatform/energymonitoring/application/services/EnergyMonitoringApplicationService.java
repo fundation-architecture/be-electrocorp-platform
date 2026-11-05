@@ -7,6 +7,7 @@ import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.aggrega
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.EnergyReadingStatus;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.repositories.EnergyReadingRepository;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.services.CurrentConsumptionService;
+import com.electrocorp.electrocorpplatform.energymonitoring.domain.services.TariffProvider;
 import com.electrocorp.electrocorpplatform.energymonitoring.interfaces.rest.resources.EnergyDashboardSummaryResource;
 import com.electrocorp.electrocorpplatform.notifications.domain.model.aggregates.Alert;
 import com.electrocorp.electrocorpplatform.notifications.domain.repositories.AlertRepository;
@@ -36,13 +37,12 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class EnergyMonitoringApplicationService {
 
-    private static final BigDecimal TARIFF_PER_KWH = BigDecimal.valueOf(0.75);
-
     private final EnergyReadingRepository energyReadingRepository;
     private final DeviceControlContextFacade deviceControlContextFacade;
     private final AlertRepository alertRepository;
     private final CurrentConsumptionService currentConsumptionService;
     private final ConsumptionSummaryCache consumptionSummaryCache;
+    private final TariffProvider tariffProvider;
 
     @Transactional(readOnly = true)
     public List<EnergyReading> getReadings(Long userId) {
@@ -151,7 +151,7 @@ public class EnergyMonitoringApplicationService {
     private BigDecimal calculateCostPerHour(BigDecimal watts) {
         return watts
                 .divide(BigDecimal.valueOf(1000), 6, RoundingMode.HALF_UP)
-                .multiply(TARIFF_PER_KWH)
+                .multiply(tariffProvider.tariffPerKilowattHour())
                 .setScale(2, RoundingMode.HALF_UP);
     }
 
