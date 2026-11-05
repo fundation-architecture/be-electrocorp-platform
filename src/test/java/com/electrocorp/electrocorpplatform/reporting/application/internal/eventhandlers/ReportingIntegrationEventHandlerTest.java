@@ -23,7 +23,9 @@ class ReportingIntegrationEventHandlerTest {
         handler.on(new EnergyThresholdExceededIntegrationEvent(
                 9L,
                 33L,
+                "Aire acondicionado",
                 BigDecimal.valueOf(1850),
+                BigDecimal.valueOf(1800),
                 occurredOn
         ));
 

@@ -9,14 +9,18 @@ import java.time.LocalDateTime;
 public record EnergyThresholdExceededIntegrationEvent(
         Long userId,
         Long deviceId,
+        String deviceName,
         BigDecimal watts,
+        BigDecimal thresholdWatts,
         LocalDateTime occurredOn
 ) implements IntegrationEvent {
     public static EnergyThresholdExceededIntegrationEvent from(EnergyThresholdExceededEvent event) {
         return new EnergyThresholdExceededIntegrationEvent(
                 event.userId(),
                 event.deviceId(),
+                event.deviceName(),
                 event.watts(),
+                event.thresholdWatts(),
                 event.occurredOn()
         );
     }

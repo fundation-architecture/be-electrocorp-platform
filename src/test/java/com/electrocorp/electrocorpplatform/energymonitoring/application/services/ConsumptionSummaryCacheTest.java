@@ -3,12 +3,14 @@ package com.electrocorp.electrocorpplatform.energymonitoring.application.service
 import com.electrocorp.electrocorpplatform.devicecontrol.application.facades.DeviceControlContextFacade;
 import com.electrocorp.electrocorpplatform.devicecontrol.application.facades.DeviceSnapshot;
 import com.electrocorp.electrocorpplatform.energymonitoring.application.ports.ConsumptionSummaryCache;
+import com.electrocorp.electrocorpplatform.energymonitoring.domain.factories.EnergyReadingFactory;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.aggregates.EnergyReading;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.commands.CreateEnergyReadingCommand;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.repositories.EnergyReadingRepository;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.services.CurrentConsumptionService;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.services.EnergyCostCalculator;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.services.MonthlyCostProjectionService;
+import com.electrocorp.electrocorpplatform.energymonitoring.domain.specifications.HighConsumptionSpecification;
 import com.electrocorp.electrocorpplatform.energymonitoring.infrastructure.cache.RedisConsumptionSummaryCache;
 import com.electrocorp.electrocorpplatform.energymonitoring.infrastructure.tariff.ConfigurableTariffProvider;
 import com.electrocorp.electrocorpplatform.energymonitoring.interfaces.rest.resources.EnergyDashboardSummaryResource;
@@ -75,7 +77,8 @@ class ConsumptionSummaryCacheTest {
         EnergyReadingIngestionService ingestionService = new EnergyReadingIngestionService(
                 energyReadingRepository,
                 deviceControlContextFacade,
-                mock(DomainEventPublisher.class),
+                new EnergyReadingFactory(),
+                new EnergyThresholdMonitor(mock(DomainEventPublisher.class), new HighConsumptionSpecification()),
                 cache,
                 new EnergyCostCalculator(new ConfigurableTariffProvider(new BigDecimal("0.75")))
         );
