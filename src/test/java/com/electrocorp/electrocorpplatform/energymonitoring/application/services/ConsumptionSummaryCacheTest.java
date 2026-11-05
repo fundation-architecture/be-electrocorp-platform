@@ -7,7 +7,9 @@ import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.aggrega
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.commands.CreateEnergyReadingCommand;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.repositories.EnergyReadingRepository;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.services.CurrentConsumptionService;
+import com.electrocorp.electrocorpplatform.energymonitoring.domain.services.EnergyCostCalculator;
 import com.electrocorp.electrocorpplatform.energymonitoring.infrastructure.cache.RedisConsumptionSummaryCache;
+import com.electrocorp.electrocorpplatform.energymonitoring.infrastructure.tariff.ConfigurableTariffProvider;
 import com.electrocorp.electrocorpplatform.energymonitoring.interfaces.rest.resources.EnergyDashboardSummaryResource;
 import com.electrocorp.electrocorpplatform.notifications.domain.repositories.AlertRepository;
 import com.electrocorp.electrocorpplatform.shared.application.events.DomainEventPublisher;
@@ -72,10 +74,11 @@ class ConsumptionSummaryCacheTest {
                 energyReadingRepository,
                 deviceControlContextFacade,
                 mock(DomainEventPublisher.class),
-                cache
+                cache,
+                new EnergyCostCalculator(new ConfigurableTariffProvider(new BigDecimal("0.75")))
         );
 
-        ingestionService.createReading(new CreateEnergyReadingCommand(USER_ID, 1L, "Refrigeradora", BigDecimal.valueOf(300)));
+        ingestionService.createReading(new CreateEnergyReadingCommand(USER_ID, 1L, "Refrigeradora", BigDecimal.valueOf(300), 0));
 
         assertThat(cache.store).doesNotContainKey("consumption:7:summary");
     }
@@ -119,7 +122,8 @@ class ConsumptionSummaryCacheTest {
                 deviceControlContextFacade,
                 alertRepository,
                 new CurrentConsumptionService(),
-                summaryCache
+                summaryCache,
+                new EnergyCostCalculator(new ConfigurableTariffProvider(new BigDecimal("0.75")))
         );
     }
 

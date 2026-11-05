@@ -7,6 +7,7 @@ import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.aggrega
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.EnergyReadingStatus;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.repositories.EnergyReadingRepository;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.services.CurrentConsumptionService;
+import com.electrocorp.electrocorpplatform.energymonitoring.domain.services.EnergyCostCalculator;
 import com.electrocorp.electrocorpplatform.energymonitoring.interfaces.rest.resources.EnergyDashboardSummaryResource;
 import com.electrocorp.electrocorpplatform.notifications.domain.model.aggregates.Alert;
 import com.electrocorp.electrocorpplatform.notifications.domain.repositories.AlertRepository;
@@ -36,13 +37,12 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class EnergyMonitoringApplicationService {
 
-    private static final BigDecimal TARIFF_PER_KWH = BigDecimal.valueOf(0.75);
-
     private final EnergyReadingRepository energyReadingRepository;
     private final DeviceControlContextFacade deviceControlContextFacade;
     private final AlertRepository alertRepository;
     private final CurrentConsumptionService currentConsumptionService;
     private final ConsumptionSummaryCache consumptionSummaryCache;
+    private final EnergyCostCalculator energyCostCalculator;
 
     @Transactional(readOnly = true)
     public List<EnergyReading> getReadings(Long userId) {
@@ -81,12 +81,9 @@ public class EnergyMonitoringApplicationService {
         );
         BigDecimal todayKilowattHours = currentConsumptionService.calculateTodayKilowattHours(todayReadings);
 
-        BigDecimal todayEstimatedCost = todayReadings.stream()
-                .map(this::safeEstimatedCost)
-                .reduce(BigDecimal.ZERO, BigDecimal::add)
-                .setScale(2, RoundingMode.HALF_UP);
+        BigDecimal todayEstimatedCost = energyCostCalculator.costOf(todayKilowattHours);
 
-        BigDecimal costPerHour = calculateCostPerHour(currentWatts);
+        BigDecimal costPerHour = energyCostCalculator.costPerHour(currentWatts);
         BigDecimal projectedMonthlyCost = projectMonthlyCost(todayEstimatedCost);
         BigDecimal peakWatts = todayReadings.stream()
                 .map(EnergyReading::getWatts)
@@ -131,7 +128,9 @@ public class EnergyMonitoringApplicationService {
                 buildTrend(todayReadings),
                 buildTopDevices(todayReadings, devices),
                 buildRoomConsumption(todayReadings, activeDevices, devices),
-                buildActiveDeviceDetails(activeDevices)
+                buildActiveDeviceDetails(activeDevices),
+                EnergyCostCalculator.CURRENCY,
+                EnergyCostCalculator.CURRENCY_SYMBOL
         );
     }
 
@@ -146,13 +145,6 @@ public class EnergyMonitoringApplicationService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         return total.divide(BigDecimal.valueOf(readings.size()), 2, RoundingMode.HALF_UP);
-    }
-
-    private BigDecimal calculateCostPerHour(BigDecimal watts) {
-        return watts
-                .divide(BigDecimal.valueOf(1000), 6, RoundingMode.HALF_UP)
-                .multiply(TARIFF_PER_KWH)
-                .setScale(2, RoundingMode.HALF_UP);
     }
 
     private BigDecimal projectMonthlyCost(BigDecimal todayEstimatedCost) {
@@ -257,10 +249,7 @@ public class EnergyMonitoringApplicationService {
                 .map(this::safeKilowattHours)
                 .reduce(BigDecimal.ZERO, BigDecimal::add)
                 .setScale(6, RoundingMode.HALF_UP);
-        BigDecimal estimatedCost = readings.stream()
-                .map(this::safeEstimatedCost)
-                .reduce(BigDecimal.ZERO, BigDecimal::add)
-                .setScale(2, RoundingMode.HALF_UP);
+        BigDecimal estimatedCost = energyCostCalculator.costOf(kilowattHours);
         int highReadings = (int) readings.stream()
                 .filter(reading -> reading.getStatus() == EnergyReadingStatus.HIGH)
                 .count();
@@ -305,10 +294,7 @@ public class EnergyMonitoringApplicationService {
                             .map(this::safeKilowattHours)
                             .reduce(BigDecimal.ZERO, BigDecimal::add)
                             .setScale(6, RoundingMode.HALF_UP);
-                    BigDecimal estimatedCost = entry.getValue().stream()
-                            .map(this::safeEstimatedCost)
-                            .reduce(BigDecimal.ZERO, BigDecimal::add)
-                            .setScale(2, RoundingMode.HALF_UP);
+                    BigDecimal estimatedCost = energyCostCalculator.costOf(kilowattHours);
 
                     return new EnergyDashboardSummaryResource.RoomConsumption(
                             entry.getKey(),
@@ -331,7 +317,7 @@ public class EnergyMonitoringApplicationService {
                         resolveRoom(device),
                         device.type(),
                         device.powerWatts() != null ? device.powerWatts().setScale(2, RoundingMode.HALF_UP) : BigDecimal.ZERO,
-                        calculateCostPerHour(device.powerWatts() != null ? device.powerWatts() : BigDecimal.ZERO)
+                        energyCostCalculator.costPerHour(device.powerWatts() != null ? device.powerWatts() : BigDecimal.ZERO)
                 ))
                 .toList();
     }

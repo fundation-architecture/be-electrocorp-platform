@@ -9,6 +9,7 @@ import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.aggrega
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.commands.CreateEnergyReadingCommand;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.events.EnergyThresholdExceededEvent;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.repositories.EnergyReadingRepository;
+import com.electrocorp.electrocorpplatform.energymonitoring.domain.services.EnergyCostCalculator;
 import com.electrocorp.electrocorpplatform.shared.application.events.DomainEventPublisher;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -31,20 +32,23 @@ public class EnergyReadingIngestionService {
     private final DeviceControlContextFacade deviceControlContextFacade;
     private final DomainEventPublisher domainEventPublisher;
     private final ConsumptionSummaryCache consumptionSummaryCache;
+    private final EnergyCostCalculator energyCostCalculator;
 
     @Transactional
     public EnergyReading createReading(CreateEnergyReadingCommand command) {
         DeviceSnapshot device = deviceControlContextFacade.findDeviceOfUser(command.deviceId(), command.userId())
                 .orElseThrow(() -> new IllegalArgumentException("Device not found."));
+        int sampleSeconds = command.sampleSeconds() == null ? 0 : command.sampleSeconds();
+        BigDecimal kilowattHours = energyCostCalculator.kilowattHoursOf(command.watts(), sampleSeconds);
 
         EnergyReading reading = energyReadingFactory.create(
                 command.userId(),
                 command.deviceId(),
                 device.name(),
                 command.watts(),
-                BigDecimal.ZERO,
-                BigDecimal.ZERO,
-                0,
+                kilowattHours,
+                energyCostCalculator.preciseCostOf(kilowattHours),
+                sampleSeconds,
                 LocalDateTime.now()
         );
         EnergyReading savedReading = energyReadingRepository.save(reading);

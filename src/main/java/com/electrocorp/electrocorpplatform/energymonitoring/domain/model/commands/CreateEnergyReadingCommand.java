@@ -6,6 +6,7 @@ public record CreateEnergyReadingCommand(
         Long userId,
         Long deviceId,
         String deviceName,
-        BigDecimal watts
+        BigDecimal watts,
+        Integer sampleSeconds
 ) {
 }

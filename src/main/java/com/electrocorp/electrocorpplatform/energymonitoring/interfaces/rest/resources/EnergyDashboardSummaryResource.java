@@ -25,7 +25,9 @@ public record EnergyDashboardSummaryResource(
         List<TrendPoint> trend,
         List<DeviceConsumption> topDevices,
         List<RoomConsumption> rooms,
-        List<ActiveDevice> activeDeviceDetails
+        List<ActiveDevice> activeDeviceDetails,
+        String currency,
+        String currencySymbol
 ) {
     public record TrendPoint(
             String label,
