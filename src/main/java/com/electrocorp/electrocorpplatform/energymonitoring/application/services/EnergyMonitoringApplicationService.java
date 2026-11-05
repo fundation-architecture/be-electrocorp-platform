@@ -10,8 +10,8 @@ import com.electrocorp.electrocorpplatform.energymonitoring.domain.services.Curr
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.services.EnergyCostCalculator;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.services.MonthlyCostProjectionService;
 import com.electrocorp.electrocorpplatform.energymonitoring.interfaces.rest.resources.EnergyDashboardSummaryResource;
-import com.electrocorp.electrocorpplatform.notifications.domain.model.aggregates.Alert;
-import com.electrocorp.electrocorpplatform.notifications.domain.repositories.AlertRepository;
+import com.electrocorp.electrocorpplatform.notifications.application.facades.ActiveAlertsOverview;
+import com.electrocorp.electrocorpplatform.notifications.application.facades.NotificationsContextFacade;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,7 +39,7 @@ public class EnergyMonitoringApplicationService {
 
     private final EnergyReadingRepository energyReadingRepository;
     private final DeviceControlContextFacade deviceControlContextFacade;
-    private final AlertRepository alertRepository;
+    private final NotificationsContextFacade notificationsContextFacade;
     private final CurrentConsumptionService currentConsumptionService;
     private final ConsumptionSummaryCache consumptionSummaryCache;
     private final EnergyCostCalculator energyCostCalculator;
@@ -105,13 +105,7 @@ public class EnergyMonitoringApplicationService {
                 .count();
         int normalReadings = Math.max(todayReadings.size() - highReadings, 0);
         int efficiencyScore = calculateEfficiencyScore(todayReadings.size(), highReadings);
-        List<Alert> activeAlerts = alertRepository.findByUserIdAndActiveTrue(userId);
-        int criticalAlerts = (int) activeAlerts.stream()
-                .filter(Alert::isCritical)
-                .count();
-        Alert latestAlert = activeAlerts.stream()
-                .max(Comparator.comparing(this::alertLastTriggeredAt))
-                .orElse(null);
+        ActiveAlertsOverview alerts = notificationsContextFacade.getActiveAlertsOverview(userId);
 
         return new EnergyDashboardSummaryResource(
                 currentWatts,
@@ -129,10 +123,10 @@ public class EnergyMonitoringApplicationService {
                 efficiencyScore,
                 resolveOperationalStatus(efficiencyScore),
                 resolveRecommendation(activeDevices, todayEstimatedCost, projectedMonthlyCost),
-                activeAlerts.size(),
-                criticalAlerts,
-                latestAlert == null ? null : latestAlert.getLevel(),
-                latestAlert == null ? null : latestAlert.getTitle(),
+                alerts.activeAlerts(),
+                alerts.criticalAlerts(),
+                alerts.latestAlertLevel(),
+                alerts.latestAlertTitle(),
                 buildTrend(todayReadings),
                 buildTopDevices(todayReadings, devices),
                 buildRoomConsumption(todayReadings, activeDevices, devices),
@@ -323,18 +317,6 @@ public class EnergyMonitoringApplicationService {
         }
 
         return device.room().trim();
-    }
-
-    private LocalDateTime alertLastTriggeredAt(Alert alert) {
-        if (alert.getLastTriggeredAt() != null) {
-            return alert.getLastTriggeredAt();
-        }
-
-        if (alert.getFirstDetectedAt() != null) {
-            return alert.getFirstDetectedAt();
-        }
-
-        return LocalDateTime.MIN;
     }
 
     private BigDecimal safeKilowattHours(EnergyReading reading) {

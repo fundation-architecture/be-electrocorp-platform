@@ -14,7 +14,8 @@ import com.electrocorp.electrocorpplatform.energymonitoring.domain.specification
 import com.electrocorp.electrocorpplatform.energymonitoring.infrastructure.cache.RedisConsumptionSummaryCache;
 import com.electrocorp.electrocorpplatform.energymonitoring.infrastructure.tariff.ConfigurableTariffProvider;
 import com.electrocorp.electrocorpplatform.energymonitoring.interfaces.rest.resources.EnergyDashboardSummaryResource;
-import com.electrocorp.electrocorpplatform.notifications.domain.repositories.AlertRepository;
+import com.electrocorp.electrocorpplatform.notifications.application.facades.ActiveAlertsOverview;
+import com.electrocorp.electrocorpplatform.notifications.application.facades.NotificationsContextFacade;
 import com.electrocorp.electrocorpplatform.shared.application.events.DomainEventPublisher;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.RedisConnectionFailureException;
@@ -49,7 +50,7 @@ class ConsumptionSummaryCacheTest {
 
     private final EnergyReadingRepository energyReadingRepository = mock(EnergyReadingRepository.class);
     private final DeviceControlContextFacade deviceControlContextFacade = mock(DeviceControlContextFacade.class);
-    private final AlertRepository alertRepository = mock(AlertRepository.class);
+    private final NotificationsContextFacade notificationsContextFacade = userId -> ActiveAlertsOverview.empty();
     private final InMemoryConsumptionSummaryCache cache = new InMemoryConsumptionSummaryCache();
 
     @Test
@@ -125,7 +126,7 @@ class ConsumptionSummaryCacheTest {
         return new EnergyMonitoringApplicationService(
                 energyReadingRepository,
                 deviceControlContextFacade,
-                alertRepository,
+                notificationsContextFacade,
                 new CurrentConsumptionService(),
                 summaryCache,
                 new EnergyCostCalculator(new ConfigurableTariffProvider(new BigDecimal("0.75"))),
