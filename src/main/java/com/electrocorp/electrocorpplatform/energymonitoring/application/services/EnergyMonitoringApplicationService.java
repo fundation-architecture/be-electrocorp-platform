@@ -1,21 +1,16 @@
 package com.electrocorp.electrocorpplatform.energymonitoring.application.services;
 
-import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.aggregates.Device;
-import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.DeviceStatus;
-import com.electrocorp.electrocorpplatform.devicecontrol.domain.repositories.DeviceRepository;
-import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.commands.CreateEnergyReadingCommand;
-import com.electrocorp.electrocorpplatform.energymonitoring.domain.factories.EnergyReadingFactory;
+import com.electrocorp.electrocorpplatform.devicecontrol.application.facades.DeviceControlContextFacade;
+import com.electrocorp.electrocorpplatform.devicecontrol.application.facades.DeviceSnapshot;
+import com.electrocorp.electrocorpplatform.energymonitoring.application.ports.ConsumptionSummaryCache;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.aggregates.EnergyReading;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.EnergyReadingStatus;
-import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.events.EnergyThresholdExceededEvent;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.repositories.EnergyReadingRepository;
+import com.electrocorp.electrocorpplatform.energymonitoring.domain.services.CurrentConsumptionService;
 import com.electrocorp.electrocorpplatform.energymonitoring.interfaces.rest.resources.EnergyDashboardSummaryResource;
 import com.electrocorp.electrocorpplatform.notifications.domain.model.aggregates.Alert;
 import com.electrocorp.electrocorpplatform.notifications.domain.repositories.AlertRepository;
-import com.electrocorp.electrocorpplatform.shared.application.events.DomainEventPublisher;
 import lombok.RequiredArgsConstructor;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,39 +27,46 @@ import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+/**
+ * Lado de consulta (Energy Query) de Energy Monitoring. Sus metodos son de solo lectura:
+ * la ingesta de lecturas vive en {@link EnergyReadingIngestionService} y en
+ * {@link EnergyReadingSchedulerService} (CQRS, Capitulo IV).
+ */
 @Service
 @RequiredArgsConstructor
 public class EnergyMonitoringApplicationService {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(EnergyMonitoringApplicationService.class);
-
     private static final BigDecimal TARIFF_PER_KWH = BigDecimal.valueOf(0.75);
-    private final EnergyReadingFactory energyReadingFactory = new EnergyReadingFactory();
 
     private final EnergyReadingRepository energyReadingRepository;
-    private final DeviceRepository deviceRepository;
+    private final DeviceControlContextFacade deviceControlContextFacade;
     private final AlertRepository alertRepository;
-    private final EnergyReadingRecorderService energyReadingRecorderService;
-    private final EnergySamplingSettingsService energySamplingSettingsService;
-    private final DomainEventPublisher domainEventPublisher;
+    private final CurrentConsumptionService currentConsumptionService;
+    private final ConsumptionSummaryCache consumptionSummaryCache;
 
-    @Transactional
+    @Transactional(readOnly = true)
     public List<EnergyReading> getReadings(Long userId) {
-        recordDueActiveDeviceIntervals(userId);
         return energyReadingRepository.findByUserIdOrderByRecordedAtDesc(userId);
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public List<EnergyReading> getReadings(Long userId, LocalDateTime start, LocalDateTime end) {
-        recordDueActiveDeviceIntervals(userId);
         return energyReadingRepository.findByUserIdAndRecordedAtBetweenOrderByRecordedAtDesc(userId, start, end);
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public EnergyDashboardSummaryResource getDashboardSummary(Long userId) {
-        List<Device> devices = recordDueActiveDeviceIntervals(userId);
-        List<Device> activeDevices = devices.stream()
-                .filter(device -> device.getStatus() == DeviceStatus.ON)
+        return consumptionSummaryCache.get(userId).orElseGet(() -> {
+            EnergyDashboardSummaryResource summary = buildDashboardSummary(userId);
+            consumptionSummaryCache.put(userId, summary);
+            return summary;
+        });
+    }
+
+    private EnergyDashboardSummaryResource buildDashboardSummary(Long userId) {
+        List<DeviceSnapshot> devices = deviceControlContextFacade.findDevicesByUserId(userId);
+        List<DeviceSnapshot> activeDevices = devices.stream()
+                .filter(DeviceSnapshot::active)
                 .toList();
 
         LocalDate today = LocalDate.now();
@@ -73,16 +75,11 @@ public class EnergyMonitoringApplicationService {
         List<EnergyReading> todayReadings = energyReadingRepository
                 .findByUserIdAndRecordedAtBetweenOrderByRecordedAtDesc(userId, startOfDay, endOfDay);
 
-        BigDecimal currentWatts = activeDevices.stream()
-                .map(Device::getPowerWatts)
-                .filter(Objects::nonNull)
-                .reduce(BigDecimal.ZERO, BigDecimal::add)
-                .setScale(2, RoundingMode.HALF_UP);
-
-        BigDecimal todayKilowattHours = todayReadings.stream()
-                .map(this::safeKilowattHours)
-                .reduce(BigDecimal.ZERO, BigDecimal::add)
-                .setScale(6, RoundingMode.HALF_UP);
+        BigDecimal currentWatts = currentConsumptionService.calculateCurrentWatts(
+                activeDevices.stream().map(DeviceSnapshot::id).toList(),
+                todayReadings
+        );
+        BigDecimal todayKilowattHours = currentConsumptionService.calculateTodayKilowattHours(todayReadings);
 
         BigDecimal todayEstimatedCost = todayReadings.stream()
                 .map(this::safeEstimatedCost)
@@ -138,36 +135,6 @@ public class EnergyMonitoringApplicationService {
         );
     }
 
-    @Transactional
-    public EnergyReading createReading(CreateEnergyReadingCommand command) {
-        Device device = deviceRepository.findByIdAndUserId(command.deviceId(), command.userId())
-                .orElseThrow(() -> new IllegalArgumentException("Device not found."));
-
-        EnergyReading reading = energyReadingFactory.create(
-                command.userId(),
-                command.deviceId(),
-                device.getName(),
-                command.watts(),
-                BigDecimal.ZERO,
-                BigDecimal.ZERO,
-                0,
-                LocalDateTime.now()
-        );
-        EnergyReading savedReading = energyReadingRepository.save(reading);
-        publishThresholdExceededIfNeeded(savedReading);
-        return savedReading;
-    }
-
-    private void publishThresholdExceededIfNeeded(EnergyReading reading) {
-        if (reading != null && reading.getStatus() == EnergyReadingStatus.HIGH) {
-            domainEventPublisher.publish(new EnergyThresholdExceededEvent(
-                    reading.getUserId(),
-                    reading.getDeviceId(),
-                    reading.getWatts()
-            ));
-        }
-    }
-
     private BigDecimal calculateAverageWatts(List<EnergyReading> readings) {
         if (readings.isEmpty()) {
             return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
@@ -218,7 +185,7 @@ public class EnergyMonitoringApplicationService {
     }
 
     private String resolveRecommendation(
-            List<Device> activeDevices,
+            List<DeviceSnapshot> activeDevices,
             BigDecimal todayEstimatedCost,
             BigDecimal projectedMonthlyCost
     ) {
@@ -226,17 +193,17 @@ public class EnergyMonitoringApplicationService {
             return "No hay dispositivos encendidos. El consumo actual esta en reposo.";
         }
 
-        Device highestActiveDevice = activeDevices.stream()
-                .filter(device -> device.getPowerWatts() != null)
-                .max(Comparator.comparing(Device::getPowerWatts))
+        DeviceSnapshot highestActiveDevice = activeDevices.stream()
+                .filter(device -> device.powerWatts() != null)
+                .max(Comparator.comparing(DeviceSnapshot::powerWatts))
                 .orElse(null);
 
         if (highestActiveDevice == null) {
             return "Hay dispositivos activos sin potencia registrada. Completa sus watts para estimar costos.";
         }
 
-        return "El mayor consumo activo es " + highestActiveDevice.getName()
-                + " con " + highestActiveDevice.getPowerWatts().setScale(2, RoundingMode.HALF_UP)
+        return "El mayor consumo activo es " + highestActiveDevice.name()
+                + " con " + highestActiveDevice.powerWatts().setScale(2, RoundingMode.HALF_UP)
                 + " W. Hoy vas en S/ " + todayEstimatedCost
                 + " y la proyeccion mensual es S/ " + projectedMonthlyCost + ".";
     }
@@ -261,10 +228,10 @@ public class EnergyMonitoringApplicationService {
 
     private List<EnergyDashboardSummaryResource.DeviceConsumption> buildTopDevices(
             List<EnergyReading> readings,
-            List<Device> devices
+            List<DeviceSnapshot> devices
     ) {
-        Map<Long, Device> deviceById = devices.stream()
-                .collect(Collectors.toMap(Device::getId, Function.identity()));
+        Map<Long, DeviceSnapshot> deviceById = devices.stream()
+                .collect(Collectors.toMap(DeviceSnapshot::id, Function.identity()));
 
         return readings.stream()
                 .collect(Collectors.groupingBy(EnergyReading::getDeviceId))
@@ -279,7 +246,7 @@ public class EnergyMonitoringApplicationService {
     private EnergyDashboardSummaryResource.DeviceConsumption toDeviceConsumption(
             Long deviceId,
             List<EnergyReading> readings,
-            Device device
+            DeviceSnapshot device
     ) {
         BigDecimal watts = readings.stream()
                 .map(EnergyReading::getWatts)
@@ -304,8 +271,8 @@ public class EnergyMonitoringApplicationService {
         return new EnergyDashboardSummaryResource.DeviceConsumption(
                 deviceId,
                 latest.getDeviceName(),
-                device != null ? device.getRoom() : "Sin ambiente",
-                device != null ? device.getType() : "Sin tipo",
+                device != null ? device.room() : "Sin ambiente",
+                device != null ? device.type() : "Sin tipo",
                 watts,
                 kilowattHours,
                 estimatedCost,
@@ -316,11 +283,11 @@ public class EnergyMonitoringApplicationService {
 
     private List<EnergyDashboardSummaryResource.RoomConsumption> buildRoomConsumption(
             List<EnergyReading> readings,
-            List<Device> activeDevices,
-            List<Device> devices
+            List<DeviceSnapshot> activeDevices,
+            List<DeviceSnapshot> devices
     ) {
-        Map<Long, Device> deviceById = devices.stream()
-                .collect(Collectors.toMap(Device::getId, Function.identity()));
+        Map<Long, DeviceSnapshot> deviceById = devices.stream()
+                .collect(Collectors.toMap(DeviceSnapshot::id, Function.identity()));
         Map<String, Long> activeCountByRoom = activeDevices.stream()
                 .collect(Collectors.groupingBy(this::resolveRoom, Collectors.counting()));
 
@@ -355,26 +322,26 @@ public class EnergyMonitoringApplicationService {
                 .toList();
     }
 
-    private List<EnergyDashboardSummaryResource.ActiveDevice> buildActiveDeviceDetails(List<Device> activeDevices) {
+    private List<EnergyDashboardSummaryResource.ActiveDevice> buildActiveDeviceDetails(List<DeviceSnapshot> activeDevices) {
         return activeDevices.stream()
-                .sorted(Comparator.comparing(Device::getPowerWatts, Comparator.nullsLast(Comparator.reverseOrder())))
+                .sorted(Comparator.comparing(DeviceSnapshot::powerWatts, Comparator.nullsLast(Comparator.reverseOrder())))
                 .map(device -> new EnergyDashboardSummaryResource.ActiveDevice(
-                        device.getId(),
-                        device.getName(),
+                        device.id(),
+                        device.name(),
                         resolveRoom(device),
-                        device.getType(),
-                        device.getPowerWatts() != null ? device.getPowerWatts().setScale(2, RoundingMode.HALF_UP) : BigDecimal.ZERO,
-                        calculateCostPerHour(device.getPowerWatts() != null ? device.getPowerWatts() : BigDecimal.ZERO)
+                        device.type(),
+                        device.powerWatts() != null ? device.powerWatts().setScale(2, RoundingMode.HALF_UP) : BigDecimal.ZERO,
+                        calculateCostPerHour(device.powerWatts() != null ? device.powerWatts() : BigDecimal.ZERO)
                 ))
                 .toList();
     }
 
-    private String resolveRoom(Device device) {
-        if (device == null || device.getRoom() == null || device.getRoom().isBlank()) {
+    private String resolveRoom(DeviceSnapshot device) {
+        if (device == null || device.room() == null || device.room().isBlank()) {
             return "Sin ambiente";
         }
 
-        return device.getRoom().trim();
+        return device.room().trim();
     }
 
     private LocalDateTime alertLastTriggeredAt(Alert alert) {
@@ -399,24 +366,5 @@ public class EnergyMonitoringApplicationService {
         return reading.getEstimatedCost() != null
                 ? reading.getEstimatedCost()
                 : BigDecimal.ZERO;
-    }
-
-    private List<Device> recordDueActiveDeviceIntervals(Long userId) {
-        List<Device> devices = deviceRepository.findByUserId(userId);
-        int sampleSeconds = energySamplingSettingsService.getSampleSeconds();
-
-        devices.stream()
-                .filter(device -> device.getStatus() == DeviceStatus.ON)
-                .forEach(device -> recordDueActiveDeviceInterval(device, sampleSeconds));
-
-        return devices;
-    }
-
-    private void recordDueActiveDeviceInterval(Device device, int sampleSeconds) {
-        try {
-            energyReadingRecorderService.recordActiveDeviceIntervalIfDue(device, sampleSeconds);
-        } catch (RuntimeException exception) {
-            LOGGER.warn("Could not record due energy reading for device {}", device.getId(), exception);
-        }
     }
 }
