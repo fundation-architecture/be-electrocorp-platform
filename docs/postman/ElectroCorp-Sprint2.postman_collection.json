@@ -1,0 +1,292 @@
+{
+  "info": {
+    "name": "ElectroCorp - Sprint 2 (Energy Monitoring y Notifications)",
+    "description": "Peticiones que evidencian las operaciones del Sprint 2: US-13 (consumo actual), US-16 (costo en soles), US-18 (proyeccion mensual) y US-20 (alerta por consumo elevado). Ejecutar en orden: la coleccion guarda token, deviceId y ruleId en variables.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      { "key": "token", "value": "{{token}}", "type": "string" }
+    ]
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "email", "value": "sprint2.demo@example.com" },
+    { "key": "password", "value": "Secur3Pass" },
+    { "key": "token", "value": "" },
+    { "key": "deviceId", "value": "" },
+    { "key": "ruleId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "0. Autenticacion",
+      "item": [
+        {
+          "name": "Registrar usuario",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Usuario Demo Sprint 2\",\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/auth/sign-up"
+          }
+        },
+        {
+          "name": "Iniciar sesion",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Inicio de sesion correcto', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('token', pm.response.json().token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/auth/sign-in"
+          }
+        },
+        {
+          "name": "Crear dispositivo",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Dispositivo creado', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('deviceId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Aire acondicionado\",\n  \"room\": \"Sala\",\n  \"type\": \"Climatizacion\",\n  \"powerWatts\": 1200\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/devices"
+          }
+        }
+      ]
+    },
+    {
+      "name": "US-13 Consumo actual",
+      "item": [
+        {
+          "name": "Resumen con usuario sin lecturas (0 W)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Responde sin error', () => pm.response.to.have.status(200));",
+                  "pm.test('Consumo actual en 0 W', () => pm.expect(Number(pm.response.json().currentWatts)).to.eql(0));"
+                ]
+              }
+            }
+          ],
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/v1/energy-readings/dashboard-summary" }
+        },
+        {
+          "name": "Encender dispositivo",
+          "request": { "method": "PATCH", "header": [], "url": "{{baseUrl}}/api/v1/devices/{{deviceId}}/toggle" }
+        },
+        {
+          "name": "Registrar lectura (1150 W)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deviceId\": {{deviceId}},\n  \"deviceName\": \"Aire acondicionado\",\n  \"watts\": 1150\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/energy-readings"
+          }
+        },
+        {
+          "name": "Resumen del panel: potencia actual y kWh del dia",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Potencia actual mayor a 0 W', () => pm.expect(Number(body.currentWatts)).to.be.above(0));",
+                  "pm.test('Incluye los kWh del dia', () => pm.expect(body).to.have.property('todayKilowattHours'));"
+                ]
+              }
+            }
+          ],
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/v1/energy-readings/dashboard-summary" }
+        },
+        {
+          "name": "Listar lecturas (consulta de solo lectura)",
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/v1/energy-readings" }
+        }
+      ]
+    },
+    {
+      "name": "US-16 Costo en soles",
+      "item": [
+        {
+          "name": "Registrar lectura de una hora (1000 W x 3600 s = 1 kWh)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deviceId\": {{deviceId}},\n  \"deviceName\": \"Aire acondicionado\",\n  \"watts\": 1000,\n  \"sampleSeconds\": 3600\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/energy-readings"
+          }
+        },
+        {
+          "name": "Consultar costo estimado en soles",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('Moneda en soles', () => { pm.expect(body.currency).to.eql('PEN'); pm.expect(body.currencySymbol).to.eql('S/'); });",
+                  "pm.test('Costo estimado del dia mayor a 0', () => pm.expect(Number(body.todayEstimatedCost)).to.be.above(0));",
+                  "pm.test('Incluye costo por hora', () => pm.expect(body).to.have.property('costPerHour'));"
+                ]
+              }
+            }
+          ],
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/v1/energy-readings/dashboard-summary" }
+        }
+      ]
+    },
+    {
+      "name": "US-18 Proyeccion mensual",
+      "item": [
+        {
+          "name": "Consultar proyeccion del gasto mensual",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('Incluye el acumulado del mes y la proyeccion', () => { pm.expect(body).to.have.property('monthToDateCost'); pm.expect(body).to.have.property('projectedMonthlyCost'); });",
+                  "pm.test('La proyeccion no es menor que el acumulado', () => pm.expect(Number(body.projectedMonthlyCost)).to.be.at.least(Number(body.monthToDateCost)));"
+                ]
+              }
+            }
+          ],
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/v1/energy-readings/dashboard-summary" }
+        }
+      ]
+    },
+    {
+      "name": "US-20 Alerta por consumo elevado",
+      "item": [
+        {
+          "name": "Configurar limite de consumo del dispositivo",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Regla creada', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('ruleId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Limite del aire acondicionado\",\n  \"metric\": \"WATTS\",\n  \"conditionType\": \"GREATER_THAN\",\n  \"threshold\": 2000,\n  \"level\": \"WARNING\",\n  \"scopeType\": \"DEVICE\",\n  \"scopeId\": \"{{deviceId}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/alerts/rules"
+          }
+        },
+        {
+          "name": "Registrar lectura sobre el limite (2500 W)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Lectura clasificada como alta', () => pm.expect(pm.response.json().status).to.eql('HIGH'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deviceId\": {{deviceId}},\n  \"deviceName\": \"Aire acondicionado\",\n  \"watts\": 2500\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/energy-readings"
+          }
+        },
+        {
+          "name": "Consultar alertas del usuario",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const deviceId = String(pm.collectionVariables.get('deviceId'));",
+                  "const alerts = pm.response.json().filter(a => a.sourceId === deviceId && (a.threadKey.startsWith('RULE:') || a.threadKey.startsWith('ENERGY:')));",
+                  "pm.test('Existe la alerta de consumo elevado del dispositivo', () => pm.expect(alerts.length).to.be.above(0));"
+                ]
+              }
+            }
+          ],
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/v1/alerts" }
+        },
+        {
+          "name": "Listar reglas de alerta",
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/v1/alerts/rules" }
+        },
+        {
+          "name": "Consultar preferencias de notificacion",
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/v1/notifications/preferences" }
+        }
+      ]
+    },
+    {
+      "name": "Configuracion de muestreo",
+      "item": [
+        {
+          "name": "Consultar intervalo de muestreo",
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/v1/energy-readings/sampling-settings" }
+        },
+        {
+          "name": "Actualizar intervalo de muestreo",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"sampleSeconds\": 30\n}" },
+            "url": "{{baseUrl}}/api/v1/energy-readings/sampling-settings"
+          }
+        }
+      ]
+    }
+  ]
+}
