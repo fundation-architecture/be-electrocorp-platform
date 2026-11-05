@@ -9,6 +9,7 @@ import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.aggrega
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.EnergyReadingStatus;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.events.EnergyThresholdExceededEvent;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.repositories.EnergyReadingRepository;
+import com.electrocorp.electrocorpplatform.energymonitoring.domain.services.CurrentConsumptionService;
 import com.electrocorp.electrocorpplatform.energymonitoring.interfaces.rest.resources.EnergyDashboardSummaryResource;
 import com.electrocorp.electrocorpplatform.notifications.domain.model.aggregates.Alert;
 import com.electrocorp.electrocorpplatform.notifications.domain.repositories.AlertRepository;
@@ -47,6 +48,7 @@ public class EnergyMonitoringApplicationService {
     private final EnergyReadingRecorderService energyReadingRecorderService;
     private final EnergySamplingSettingsService energySamplingSettingsService;
     private final DomainEventPublisher domainEventPublisher;
+    private final CurrentConsumptionService currentConsumptionService;
 
     @Transactional
     public List<EnergyReading> getReadings(Long userId) {
@@ -73,16 +75,11 @@ public class EnergyMonitoringApplicationService {
         List<EnergyReading> todayReadings = energyReadingRepository
                 .findByUserIdAndRecordedAtBetweenOrderByRecordedAtDesc(userId, startOfDay, endOfDay);
 
-        BigDecimal currentWatts = activeDevices.stream()
-                .map(Device::getPowerWatts)
-                .filter(Objects::nonNull)
-                .reduce(BigDecimal.ZERO, BigDecimal::add)
-                .setScale(2, RoundingMode.HALF_UP);
-
-        BigDecimal todayKilowattHours = todayReadings.stream()
-                .map(this::safeKilowattHours)
-                .reduce(BigDecimal.ZERO, BigDecimal::add)
-                .setScale(6, RoundingMode.HALF_UP);
+        BigDecimal currentWatts = currentConsumptionService.calculateCurrentWatts(
+                activeDevices.stream().map(Device::getId).toList(),
+                todayReadings
+        );
+        BigDecimal todayKilowattHours = currentConsumptionService.calculateTodayKilowattHours(todayReadings);
 
         BigDecimal todayEstimatedCost = todayReadings.stream()
                 .map(this::safeEstimatedCost)
