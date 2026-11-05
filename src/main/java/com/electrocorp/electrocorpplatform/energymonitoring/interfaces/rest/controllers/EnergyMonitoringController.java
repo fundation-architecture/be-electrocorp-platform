@@ -15,6 +15,8 @@ import com.electrocorp.electrocorpplatform.energymonitoring.interfaces.rest.tran
 import com.electrocorp.electrocorpplatform.energymonitoring.interfaces.rest.transform.EnergyReadingResourceFromEntityAssembler;
 import com.electrocorp.electrocorpplatform.iam.application.security.AccessAuthorizationService;
 import com.electrocorp.electrocorpplatform.iam.domain.model.AccessPermission;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -24,6 +26,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
 
+@Tag(name = "Energy Monitoring", description = "Lecturas de consumo, resumen del panel, costo en soles y proyeccion mensual")
 @RestController
 @RequestMapping("/api/v1/energy-readings")
 @RequiredArgsConstructor
@@ -33,6 +36,7 @@ public class EnergyMonitoringController {
     private final EnergyMonitoringQueryService queryService;
     private final AccessAuthorizationService accessAuthorizationService;
 
+    @Operation(summary = "Listar las lecturas de consumo", description = "Devuelve las lecturas del usuario; acepta recordedAt_gte y recordedAt_lte (yyyy-MM-dd). Es una consulta de solo lectura (CQRS).")
     @GetMapping
     public List<EnergyReadingResource> getReadings(
             @RequestParam(name = "recordedAt_gte", required = false) String recordedAtGte,
@@ -54,17 +58,20 @@ public class EnergyMonitoringController {
                 .toList();
     }
 
+    @Operation(summary = "Consultar el resumen del panel de consumo", description = "Devuelve currentWatts, todayKilowattHours, todayEstimatedCost, monthToDateCost, projectedMonthlyCost y costPerHour en soles (US-13, US-16, US-18). Se sirve desde Redis durante 30 s (QA-02).")
     @GetMapping("/dashboard-summary")
     public EnergyDashboardSummaryResource getDashboardSummary() {
         return queryService.handle(new GetEnergyDashboardSummaryQuery(requireEnergyAccess()));
     }
 
+    @Operation(summary = "Consultar el intervalo de muestreo", description = "Devuelve cada cuantos segundos el planificador registra lecturas de los dispositivos encendidos.")
     @GetMapping("/sampling-settings")
     public EnergySamplingSettingsResource getSamplingSettings() {
         requireEnergyAccess();
         return new EnergySamplingSettingsResource(queryService.handle(new GetEnergySamplingSettingsQuery()));
     }
 
+    @Operation(summary = "Actualizar el intervalo de muestreo", description = "Cambia el intervalo del planificador de ingesta (entre 5 y 3600 segundos).")
     @PatchMapping("/sampling-settings")
     public EnergySamplingSettingsResource updateSamplingSettings(
             @Valid @RequestBody UpdateEnergySamplingSettingsResource request
@@ -75,6 +82,7 @@ public class EnergyMonitoringController {
         );
     }
 
+    @Operation(summary = "Registrar una lectura de consumo", description = "Registra una lectura del dispositivo (sampleSeconds opcional para calcular kWh y costo). Si supera el limite configurado publica EnergyThresholdExceededEvent (US-20) e invalida la cache del resumen.")
     @PostMapping
     public EnergyReadingResource createReading(@Valid @RequestBody CreateEnergyReadingResource request) {
         var command = CreateEnergyReadingCommandFromResourceAssembler.toCommandFromResource(request, requireEnergyAccess());
