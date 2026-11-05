@@ -9,6 +9,7 @@ import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.aggregates
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.aggregates.OperationMode;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.entities.OperationModeRoutine;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.entities.DeviceGroupDevice;
+import com.electrocorp.electrocorpplatform.devicecontrol.application.facades.DeviceSnapshot;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.DeviceStatus;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.OperationModeStatus;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.RoutineAction;
@@ -175,7 +176,7 @@ public class DeviceControlApplicationService {
                     DeviceStatus previousStatus = device.getStatus();
                     device.turnOn();
                     Device savedDevice = deviceRepository.save(device);
-                    energyReadingRecorderService.recordStatusTransition(savedDevice, previousStatus);
+                    energyReadingRecorderService.recordStatusTransition(DeviceSnapshot.from(savedDevice), previousStatus == DeviceStatus.ON);
                     turnedOn.add(savedDevice.getId());
                 }
             });
@@ -187,7 +188,7 @@ public class DeviceControlApplicationService {
                     DeviceStatus previousStatus = device.getStatus();
                     device.turnOff();
                     Device savedDevice = deviceRepository.save(device);
-                    energyReadingRecorderService.recordStatusTransition(savedDevice, previousStatus);
+                    energyReadingRecorderService.recordStatusTransition(DeviceSnapshot.from(savedDevice), previousStatus == DeviceStatus.ON);
                     turnedOff.add(savedDevice.getId());
                 }
             });
@@ -335,7 +336,7 @@ public class DeviceControlApplicationService {
 
         Device savedDevice = deviceRepository.save(device);
 
-        energyReadingRecorderService.recordStatusTransition(savedDevice, previousStatus);
+        energyReadingRecorderService.recordStatusTransition(DeviceSnapshot.from(savedDevice), previousStatus == DeviceStatus.ON);
 
         return savedDevice;
     }
@@ -346,7 +347,7 @@ public class DeviceControlApplicationService {
                 .orElseThrow(() -> new IllegalArgumentException("Device not found."));
 
         if (device.getStatus() == DeviceStatus.ON) {
-            energyReadingRecorderService.closeUsage(device);
+            energyReadingRecorderService.closeUsage(DeviceSnapshot.from(device));
         }
 
         device.markAsRemoved();
@@ -376,7 +377,7 @@ public class DeviceControlApplicationService {
 
         Device savedDevice = deviceRepository.save(device);
 
-        energyReadingRecorderService.recordStatusTransition(savedDevice, previousStatus);
+        energyReadingRecorderService.recordStatusTransition(DeviceSnapshot.from(savedDevice), previousStatus == DeviceStatus.ON);
 
         if (savedDevice.isRemoved()) {
             deviceGroupDeviceRepository.deleteByDeviceId(savedDevice.getId());
@@ -516,7 +517,7 @@ public class DeviceControlApplicationService {
             }
 
             Device savedDevice = deviceRepository.save(device);
-            energyReadingRecorderService.recordStatusTransition(savedDevice, previousStatus);
+            energyReadingRecorderService.recordStatusTransition(DeviceSnapshot.from(savedDevice), previousStatus == DeviceStatus.ON);
         });
 
         routine.markExecutedAt(executedAt);
@@ -631,7 +632,7 @@ public class DeviceControlApplicationService {
                 device.markAsRemoved();
             }
             Device savedDevice = deviceRepository.save(device);
-            energyReadingRecorderService.recordStatusTransition(savedDevice, previousStatus);
+            energyReadingRecorderService.recordStatusTransition(DeviceSnapshot.from(savedDevice), previousStatus == DeviceStatus.ON);
             if (savedDevice.isRemoved()) {
                 deviceGroupDeviceRepository.deleteByDeviceId(savedDevice.getId());
                 deleteDirectDeviceRoutines(savedDevice.getUserId(), savedDevice.getId());
@@ -905,7 +906,7 @@ public class DeviceControlApplicationService {
             }
 
             Device savedDevice = deviceRepository.save(device);
-            energyReadingRecorderService.recordStatusTransition(savedDevice, previousStatus);
+            energyReadingRecorderService.recordStatusTransition(DeviceSnapshot.from(savedDevice), previousStatus == DeviceStatus.ON);
 
             if (action == RoutineAction.TURN_ON) {
                 turnedOn.add(savedDevice.getId());

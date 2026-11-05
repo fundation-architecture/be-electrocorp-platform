@@ -1,13 +1,11 @@
 package com.electrocorp.electrocorpplatform.energymonitoring.application.services;
 
-import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.DeviceStatus;
-import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.aggregates.Device;
-import com.electrocorp.electrocorpplatform.devicecontrol.domain.repositories.DeviceRepository;
+import com.electrocorp.electrocorpplatform.devicecontrol.application.facades.DeviceControlContextFacade;
+import com.electrocorp.electrocorpplatform.devicecontrol.application.facades.DeviceSnapshot;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.repositories.EnergyReadingRepository;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.services.CurrentConsumptionService;
 import com.electrocorp.electrocorpplatform.notifications.domain.repositories.AlertRepository;
 import org.junit.jupiter.api.Test;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -29,18 +27,18 @@ import static org.mockito.Mockito.when;
 class EnergyQuerySideEffectFreeTest {
 
     private final EnergyReadingRepository energyReadingRepository = mock(EnergyReadingRepository.class);
-    private final DeviceRepository deviceRepository = mock(DeviceRepository.class);
+    private final DeviceControlContextFacade deviceControlContextFacade = mock(DeviceControlContextFacade.class);
     private final AlertRepository alertRepository = mock(AlertRepository.class);
     private final EnergyMonitoringApplicationService queryService = new EnergyMonitoringApplicationService(
             energyReadingRepository,
-            deviceRepository,
+            deviceControlContextFacade,
             alertRepository,
             new CurrentConsumptionService()
     );
 
     @Test
     void readingQueriesAndDashboardSummaryDoNotInsertReadings() {
-        when(deviceRepository.findByUserId(7L)).thenReturn(List.of(device(1L, 7L, DeviceStatus.ON)));
+        when(deviceControlContextFacade.findDevicesByUserId(7L)).thenReturn(List.of(device(1L, 7L, true)));
         long insertsBefore = countSaveInvocations();
 
         queryService.getReadings(7L);
@@ -57,13 +55,13 @@ class EnergyQuerySideEffectFreeTest {
         EnergyReadingRecorderService recorderService = mock(EnergyReadingRecorderService.class);
         EnergySamplingSettingsService settingsService = new EnergySamplingSettingsService();
         EnergyReadingSchedulerService scheduler = new EnergyReadingSchedulerService(
-                deviceRepository,
+                deviceControlContextFacade,
                 recorderService,
                 settingsService
         );
-        Device activeDevice = device(1L, 7L, DeviceStatus.ON);
-        Device inactiveDevice = device(2L, 7L, DeviceStatus.OFF);
-        when(deviceRepository.findAll()).thenReturn(List.of(activeDevice, inactiveDevice));
+        DeviceSnapshot activeDevice = device(1L, 7L, true);
+        DeviceSnapshot inactiveDevice = device(2L, 7L, false);
+        when(deviceControlContextFacade.findActiveDevices()).thenReturn(List.of(activeDevice));
 
         scheduler.recordDueActiveDeviceIntervals();
 
@@ -77,15 +75,7 @@ class EnergyQuerySideEffectFreeTest {
                 .count();
     }
 
-    private Device device(Long id, Long userId, DeviceStatus status) {
-        Device device = new Device();
-        ReflectionTestUtils.setField(device, "id", id);
-        device.setUserId(userId);
-        device.setName("Dispositivo " + id);
-        device.setType("Aire acondicionado");
-        device.setRoom("Sala");
-        device.setPowerWatts(BigDecimal.valueOf(900));
-        device.setStatus(status);
-        return device;
+    private DeviceSnapshot device(Long id, Long userId, boolean active) {
+        return new DeviceSnapshot(id, userId, "Dispositivo " + id, "Sala", "Aire acondicionado", BigDecimal.valueOf(900), active);
     }
 }

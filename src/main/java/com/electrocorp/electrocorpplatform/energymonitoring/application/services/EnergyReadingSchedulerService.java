@@ -1,8 +1,7 @@
 package com.electrocorp.electrocorpplatform.energymonitoring.application.services;
 
-import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.aggregates.Device;
-import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.DeviceStatus;
-import com.electrocorp.electrocorpplatform.devicecontrol.domain.repositories.DeviceRepository;
+import com.electrocorp.electrocorpplatform.devicecontrol.application.facades.DeviceControlContextFacade;
+import com.electrocorp.electrocorpplatform.devicecontrol.application.facades.DeviceSnapshot;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,25 +22,22 @@ public class EnergyReadingSchedulerService implements SchedulingConfigurer {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(EnergyReadingSchedulerService.class);
 
-    private final DeviceRepository deviceRepository;
+    private final DeviceControlContextFacade deviceControlContextFacade;
     private final EnergyReadingRecorderService recorderService;
     private final EnergySamplingSettingsService settingsService;
 
     public void recordDueActiveDeviceIntervals() {
         int sampleSeconds = settingsService.getSampleSeconds();
-        List<Device> activeDevices = deviceRepository.findAll()
-                .stream()
-                .filter(device -> device.getStatus() == DeviceStatus.ON)
-                .toList();
+        List<DeviceSnapshot> activeDevices = deviceControlContextFacade.findActiveDevices();
 
         activeDevices.forEach(device -> recordDueActiveDeviceInterval(device, sampleSeconds));
     }
 
-    private void recordDueActiveDeviceInterval(Device device, int sampleSeconds) {
+    private void recordDueActiveDeviceInterval(DeviceSnapshot device, int sampleSeconds) {
         try {
             recorderService.recordActiveDeviceIntervalIfDue(device, sampleSeconds);
         } catch (RuntimeException exception) {
-            LOGGER.warn("Could not record scheduled energy reading for device {}", device.getId(), exception);
+            LOGGER.warn("Could not record scheduled energy reading for device {}", device.id(), exception);
         }
     }
 

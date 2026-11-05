@@ -1,7 +1,6 @@
 package com.electrocorp.electrocorpplatform.energymonitoring.application.services;
 
-import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.aggregates.Device;
-import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.DeviceStatus;
+import com.electrocorp.electrocorpplatform.devicecontrol.application.facades.DeviceSnapshot;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.factories.EnergyReadingFactory;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.EnergyDeviceUsageState;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.EnergyReadingStatus;
@@ -35,45 +34,45 @@ public class EnergyReadingRecorderService {
     private final DomainEventPublisher domainEventPublisher;
 
     @Transactional
-    public void recordStatusTransition(Device device, DeviceStatus previousStatus) {
-        DeviceStatus currentStatus = device.getStatus();
+    public void recordStatusTransition(DeviceSnapshot device, boolean wasActive) {
+        boolean isActive = device.active();
 
-        if (previousStatus == currentStatus) {
+        if (wasActive == isActive) {
             return;
         }
 
-        if (currentStatus == DeviceStatus.ON) {
+        if (isActive) {
             startUsage(device, LocalDateTime.now());
             return;
         }
 
-        if (previousStatus == DeviceStatus.ON) {
+        if (wasActive) {
             closeUsage(device, LocalDateTime.now());
         }
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public EnergyReading recordActiveDeviceInterval(Device device) {
-        if (device.getStatus() == null || device.getStatus() != DeviceStatus.ON) {
+    public EnergyReading recordActiveDeviceInterval(DeviceSnapshot device) {
+        if (!device.active()) {
             return null;
         }
 
         LocalDateTime now = LocalDateTime.now();
-        EnergyDeviceUsageState state = usageStateRepository.findByDeviceId(device.getId())
+        EnergyDeviceUsageState state = usageStateRepository.findByDeviceId(device.id())
                 .orElseGet(() -> startUsage(device, now));
 
         return recordUsageSince(device, state, now, true);
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public EnergyReading recordActiveDeviceIntervalIfDue(Device device, int minimumSeconds) {
-        if (device.getStatus() == null || device.getStatus() != DeviceStatus.ON) {
+    public EnergyReading recordActiveDeviceIntervalIfDue(DeviceSnapshot device, int minimumSeconds) {
+        if (!device.active()) {
             return null;
         }
 
         LocalDateTime now = LocalDateTime.now();
         int normalizedMinimumSeconds = Math.max(1, Math.min(MAX_SAMPLE_SECONDS, minimumSeconds));
-        EnergyDeviceUsageState state = usageStateRepository.findByDeviceId(device.getId())
+        EnergyDeviceUsageState state = usageStateRepository.findByDeviceId(device.id())
                 .orElseGet(() -> startUsage(device, now.minusSeconds(normalizedMinimumSeconds)));
         LocalDateTime lastRecordedAt = state.getLastRecordedAt() != null
                 ? state.getLastRecordedAt()
@@ -93,24 +92,24 @@ public class EnergyReadingRecorderService {
     }
 
     @Transactional
-    public EnergyReading closeUsage(Device device) {
+    public EnergyReading closeUsage(DeviceSnapshot device) {
         return closeUsage(device, LocalDateTime.now());
     }
 
-    private EnergyDeviceUsageState startUsage(Device device, LocalDateTime now) {
-        return usageStateRepository.findByDeviceId(device.getId())
+    private EnergyDeviceUsageState startUsage(DeviceSnapshot device, LocalDateTime now) {
+        return usageStateRepository.findByDeviceId(device.id())
                 .orElseGet(() -> {
                     EnergyDeviceUsageState state = new EnergyDeviceUsageState();
-                    state.setUserId(device.getUserId());
-                    state.setDeviceId(device.getId());
+                    state.setUserId(device.userId());
+                    state.setDeviceId(device.id());
                     state.setStartedAt(now);
                     state.setLastRecordedAt(now);
                     return usageStateRepository.save(state);
                 });
     }
 
-    private EnergyReading closeUsage(Device device, LocalDateTime now) {
-        return usageStateRepository.findByDeviceId(device.getId())
+    private EnergyReading closeUsage(DeviceSnapshot device, LocalDateTime now) {
+        return usageStateRepository.findByDeviceId(device.id())
                 .map(state -> {
                     EnergyReading reading = recordUsageSince(device, state, now, false);
                     usageStateRepository.delete(state);
@@ -120,7 +119,7 @@ public class EnergyReadingRecorderService {
     }
 
     private EnergyReading recordUsageSince(
-            Device device,
+            DeviceSnapshot device,
             EnergyDeviceUsageState state,
             LocalDateTime now,
             boolean keepStateOpen
@@ -154,9 +153,9 @@ public class EnergyReadingRecorderService {
             BigDecimal kilowattHours = calculateKilowattHours(watts, sampleSeconds);
 
             EnergyReading reading = energyReadingFactory.create(
-                    device.getUserId(),
-                    device.getId(),
-                    device.getName(),
+                    device.userId(),
+                    device.id(),
+                    device.name(),
                     watts,
                     kilowattHours,
                     calculateEstimatedCost(kilowattHours),
@@ -177,8 +176,8 @@ public class EnergyReadingRecorderService {
         return savedReading;
     }
 
-    private BigDecimal calculateWatts(Device device) {
-        return simulatorService.simulateWatts(device);
+    private BigDecimal calculateWatts(DeviceSnapshot device) {
+        return simulatorService.simulateWatts(device.powerWatts());
     }
 
     private BigDecimal calculateKilowattHours(BigDecimal watts, int sampleSeconds) {

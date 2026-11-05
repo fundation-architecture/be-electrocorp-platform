@@ -1,7 +1,7 @@
 package com.electrocorp.electrocorpplatform.energymonitoring.application.services;
 
-import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.aggregates.Device;
-import com.electrocorp.electrocorpplatform.devicecontrol.domain.repositories.DeviceRepository;
+import com.electrocorp.electrocorpplatform.devicecontrol.application.facades.DeviceControlContextFacade;
+import com.electrocorp.electrocorpplatform.devicecontrol.application.facades.DeviceSnapshot;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.factories.EnergyReadingFactory;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.EnergyReadingStatus;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.aggregates.EnergyReading;
@@ -27,18 +27,18 @@ public class EnergyReadingIngestionService {
     private final EnergyReadingFactory energyReadingFactory = new EnergyReadingFactory();
 
     private final EnergyReadingRepository energyReadingRepository;
-    private final DeviceRepository deviceRepository;
+    private final DeviceControlContextFacade deviceControlContextFacade;
     private final DomainEventPublisher domainEventPublisher;
 
     @Transactional
     public EnergyReading createReading(CreateEnergyReadingCommand command) {
-        Device device = deviceRepository.findByIdAndUserId(command.deviceId(), command.userId())
+        DeviceSnapshot device = deviceControlContextFacade.findDeviceOfUser(command.deviceId(), command.userId())
                 .orElseThrow(() -> new IllegalArgumentException("Device not found."));
 
         EnergyReading reading = energyReadingFactory.create(
                 command.userId(),
                 command.deviceId(),
-                device.getName(),
+                device.name(),
                 command.watts(),
                 BigDecimal.ZERO,
                 BigDecimal.ZERO,
