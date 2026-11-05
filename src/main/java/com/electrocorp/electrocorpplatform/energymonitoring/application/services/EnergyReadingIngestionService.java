@@ -2,6 +2,7 @@ package com.electrocorp.electrocorpplatform.energymonitoring.application.service
 
 import com.electrocorp.electrocorpplatform.devicecontrol.application.facades.DeviceControlContextFacade;
 import com.electrocorp.electrocorpplatform.devicecontrol.application.facades.DeviceSnapshot;
+import com.electrocorp.electrocorpplatform.energymonitoring.application.ports.ConsumptionSummaryCache;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.factories.EnergyReadingFactory;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.EnergyReadingStatus;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.aggregates.EnergyReading;
@@ -29,6 +30,7 @@ public class EnergyReadingIngestionService {
     private final EnergyReadingRepository energyReadingRepository;
     private final DeviceControlContextFacade deviceControlContextFacade;
     private final DomainEventPublisher domainEventPublisher;
+    private final ConsumptionSummaryCache consumptionSummaryCache;
 
     @Transactional
     public EnergyReading createReading(CreateEnergyReadingCommand command) {
@@ -46,6 +48,7 @@ public class EnergyReadingIngestionService {
                 LocalDateTime.now()
         );
         EnergyReading savedReading = energyReadingRepository.save(reading);
+        consumptionSummaryCache.evict(savedReading.getUserId());
         publishThresholdExceededIfNeeded(savedReading);
         return savedReading;
     }

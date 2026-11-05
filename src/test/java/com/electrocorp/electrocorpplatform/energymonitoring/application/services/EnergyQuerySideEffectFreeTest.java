@@ -2,6 +2,7 @@ package com.electrocorp.electrocorpplatform.energymonitoring.application.service
 
 import com.electrocorp.electrocorpplatform.devicecontrol.application.facades.DeviceControlContextFacade;
 import com.electrocorp.electrocorpplatform.devicecontrol.application.facades.DeviceSnapshot;
+import com.electrocorp.electrocorpplatform.energymonitoring.infrastructure.cache.NoOpConsumptionSummaryCache;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.repositories.EnergyReadingRepository;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.services.CurrentConsumptionService;
 import com.electrocorp.electrocorpplatform.notifications.domain.repositories.AlertRepository;
@@ -33,7 +34,8 @@ class EnergyQuerySideEffectFreeTest {
             energyReadingRepository,
             deviceControlContextFacade,
             alertRepository,
-            new CurrentConsumptionService()
+            new CurrentConsumptionService(),
+            new NoOpConsumptionSummaryCache()
     );
 
     @Test

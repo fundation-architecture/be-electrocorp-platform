@@ -1,6 +1,7 @@
 package com.electrocorp.electrocorpplatform.energymonitoring.application.services;
 
 import com.electrocorp.electrocorpplatform.devicecontrol.application.facades.DeviceSnapshot;
+import com.electrocorp.electrocorpplatform.energymonitoring.application.ports.ConsumptionSummaryCache;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.factories.EnergyReadingFactory;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.EnergyDeviceUsageState;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.EnergyReadingStatus;
@@ -32,6 +33,7 @@ public class EnergyReadingRecorderService {
     private final EnergyReadingRepository energyReadingRepository;
     private final EnergyConsumptionSimulatorService simulatorService;
     private final DomainEventPublisher domainEventPublisher;
+    private final ConsumptionSummaryCache consumptionSummaryCache;
 
     @Transactional
     public void recordStatusTransition(DeviceSnapshot device, boolean wasActive) {
@@ -166,6 +168,10 @@ public class EnergyReadingRecorderService {
             savedReading = energyReadingRepository.save(reading);
             publishThresholdExceededIfNeeded(savedReading);
             remainingSeconds -= sampleSeconds;
+        }
+
+        if (savedReading != null) {
+            consumptionSummaryCache.evict(device.userId());
         }
 
         if (keepStateOpen) {

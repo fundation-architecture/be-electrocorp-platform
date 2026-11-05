@@ -2,6 +2,7 @@ package com.electrocorp.electrocorpplatform.energymonitoring.application.service
 
 import com.electrocorp.electrocorpplatform.devicecontrol.application.facades.DeviceControlContextFacade;
 import com.electrocorp.electrocorpplatform.devicecontrol.application.facades.DeviceSnapshot;
+import com.electrocorp.electrocorpplatform.energymonitoring.application.ports.ConsumptionSummaryCache;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.aggregates.EnergyReading;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.EnergyReadingStatus;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.repositories.EnergyReadingRepository;
@@ -41,6 +42,7 @@ public class EnergyMonitoringApplicationService {
     private final DeviceControlContextFacade deviceControlContextFacade;
     private final AlertRepository alertRepository;
     private final CurrentConsumptionService currentConsumptionService;
+    private final ConsumptionSummaryCache consumptionSummaryCache;
 
     @Transactional(readOnly = true)
     public List<EnergyReading> getReadings(Long userId) {
@@ -54,6 +56,14 @@ public class EnergyMonitoringApplicationService {
 
     @Transactional(readOnly = true)
     public EnergyDashboardSummaryResource getDashboardSummary(Long userId) {
+        return consumptionSummaryCache.get(userId).orElseGet(() -> {
+            EnergyDashboardSummaryResource summary = buildDashboardSummary(userId);
+            consumptionSummaryCache.put(userId, summary);
+            return summary;
+        });
+    }
+
+    private EnergyDashboardSummaryResource buildDashboardSummary(Long userId) {
         List<DeviceSnapshot> devices = deviceControlContextFacade.findDevicesByUserId(userId);
         List<DeviceSnapshot> activeDevices = devices.stream()
                 .filter(DeviceSnapshot::active)
