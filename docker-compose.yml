@@ -1,0 +1,65 @@
+# Entorno local del Sprint 2: aplicacion + PostgreSQL + Redis.
+# Uso:
+#   1. cp .env.example .env   (y reemplazar los valores de ejemplo)
+#   2. docker compose up --build
+# Las credenciales se leen de variables de entorno; no se guardan secretos en el repositorio.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: electrocorp-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?Define POSTGRES_DB en .env}
+      POSTGRES_USER: ${POSTGRES_USER:?Define POSTGRES_USER en .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Define POSTGRES_PASSWORD en .env}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: electrocorp-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: electrocorp-platform
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
+      DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      DATABASE_USER: ${POSTGRES_USER}
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      ELECTROCORP_SECURITY_JWT_SECRET: ${JWT_SECRET:?Define JWT_SECRET en .env}
+      JWT_SECRET: ${JWT_SECRET}
+      ENERGY_TARIFF_PER_KWH: ${ENERGY_TARIFF_PER_KWH:-0.75}
+      ENERGY_SUMMARY_CACHE_ENABLED: ${ENERGY_SUMMARY_CACHE_ENABLED:-true}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:4200}
+    ports:
+      - "${APP_PORT:-8080}:8080"
+
+volumes:
+  postgres-data:

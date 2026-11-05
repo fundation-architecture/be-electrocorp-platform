@@ -145,12 +145,13 @@ public class NotificationIntegrationEventHandler {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     public void on(EnergyThresholdExceededIntegrationEvent event) {
+        String deviceLabel = deviceLabel(event);
         Alert ruleAlert = notificationApplicationService.createAlertFromRuleEvaluation(
                 event.userId(),
                 RuleScopeType.DEVICE,
                 String.valueOf(event.deviceId()),
                 event.watts(),
-                "Dispositivo " + event.deviceId()
+                deviceLabel
         );
 
         if (ruleAlert != null) {
@@ -159,15 +160,15 @@ public class NotificationIntegrationEventHandler {
 
         notificationApplicationService.createAlert(new CreateAlertCommand(
                 event.userId(),
-                "Consumo elevado detectado",
-                "El dispositivo supero el umbral de consumo esperado.",
+                "Consumo elevado en " + deviceLabel,
+                "%s registro %s W y supero el limite de %s W.".formatted(deviceLabel, event.watts(), event.thresholdWatts()),
                 "WARNING",
                 "DEVICE",
                 String.valueOf(event.deviceId()),
-                "Dispositivo " + event.deviceId(),
+                deviceLabel,
                 "CONSUMPTION_REVIEW",
                 "ENERGY:DEVICE:%d:THRESHOLD".formatted(event.deviceId()),
-                "Lectura de " + event.watts() + " W registrada en monitoreo energetico.",
+                "Lectura de " + event.watts() + " W en " + deviceLabel + " (limite " + event.thresholdWatts() + " W).",
                 "Energy Monitoring clasifico la lectura como alta y la comunico a Notifications.",
                 "Revisa rutinas activas o apaga cargas no prioritarias.",
                 68,
@@ -210,6 +211,12 @@ public class NotificationIntegrationEventHandler {
                 40,
                 null
         ));
+    }
+
+    private String deviceLabel(EnergyThresholdExceededIntegrationEvent event) {
+        return event.deviceName() == null || event.deviceName().isBlank()
+                ? "Dispositivo " + event.deviceId()
+                : event.deviceName().trim();
     }
 
     private CreateAlertCommand systemAlert(
