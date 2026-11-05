@@ -8,6 +8,7 @@ import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.EnergyR
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.repositories.EnergyReadingRepository;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.services.CurrentConsumptionService;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.services.EnergyCostCalculator;
+import com.electrocorp.electrocorpplatform.energymonitoring.domain.services.MonthlyCostProjectionService;
 import com.electrocorp.electrocorpplatform.energymonitoring.interfaces.rest.resources.EnergyDashboardSummaryResource;
 import com.electrocorp.electrocorpplatform.notifications.domain.model.aggregates.Alert;
 import com.electrocorp.electrocorpplatform.notifications.domain.repositories.AlertRepository;
@@ -19,7 +20,6 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.List;
@@ -43,6 +43,7 @@ public class EnergyMonitoringApplicationService {
     private final CurrentConsumptionService currentConsumptionService;
     private final ConsumptionSummaryCache consumptionSummaryCache;
     private final EnergyCostCalculator energyCostCalculator;
+    private final MonthlyCostProjectionService monthlyCostProjectionService;
 
     @Transactional(readOnly = true)
     public List<EnergyReading> getReadings(Long userId) {
@@ -84,7 +85,13 @@ public class EnergyMonitoringApplicationService {
         BigDecimal todayEstimatedCost = energyCostCalculator.costOf(todayKilowattHours);
 
         BigDecimal costPerHour = energyCostCalculator.costPerHour(currentWatts);
-        BigDecimal projectedMonthlyCost = projectMonthlyCost(todayEstimatedCost);
+        List<EnergyReading> monthReadings = energyReadingRepository
+                .findByUserIdAndRecordedAtBetweenOrderByRecordedAtDesc(userId, today.withDayOfMonth(1).atStartOfDay(), endOfDay);
+        BigDecimal monthKilowattHours = monthReadings.stream()
+                .map(this::safeKilowattHours)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal monthToDateCost = energyCostCalculator.costOf(monthKilowattHours);
+        BigDecimal projectedMonthlyCost = monthlyCostProjectionService.project(monthToDateCost, today);
         BigDecimal peakWatts = todayReadings.stream()
                 .map(EnergyReading::getWatts)
                 .filter(Objects::nonNull)
@@ -145,19 +152,6 @@ public class EnergyMonitoringApplicationService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         return total.divide(BigDecimal.valueOf(readings.size()), 2, RoundingMode.HALF_UP);
-    }
-
-    private BigDecimal projectMonthlyCost(BigDecimal todayEstimatedCost) {
-        int dayOfMonth = LocalDate.now().getDayOfMonth();
-        int daysInMonth = YearMonth.now().lengthOfMonth();
-
-        if (dayOfMonth <= 0) {
-            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
-        }
-
-        return todayEstimatedCost
-                .multiply(BigDecimal.valueOf(daysInMonth))
-                .divide(BigDecimal.valueOf(dayOfMonth), 2, RoundingMode.HALF_UP);
     }
 
     private int calculateEfficiencyScore(int totalReadings, int highReadings) {
