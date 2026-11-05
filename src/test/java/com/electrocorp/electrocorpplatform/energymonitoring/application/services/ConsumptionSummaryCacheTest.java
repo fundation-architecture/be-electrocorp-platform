@@ -8,6 +8,7 @@ import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.command
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.repositories.EnergyReadingRepository;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.services.CurrentConsumptionService;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.services.EnergyCostCalculator;
+import com.electrocorp.electrocorpplatform.energymonitoring.domain.services.MonthlyCostProjectionService;
 import com.electrocorp.electrocorpplatform.energymonitoring.infrastructure.cache.RedisConsumptionSummaryCache;
 import com.electrocorp.electrocorpplatform.energymonitoring.infrastructure.tariff.ConfigurableTariffProvider;
 import com.electrocorp.electrocorpplatform.energymonitoring.interfaces.rest.resources.EnergyDashboardSummaryResource;
@@ -31,6 +32,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockingDetails;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -53,13 +55,13 @@ class ConsumptionSummaryCacheTest {
         EnergyMonitoringApplicationService queryService = queryServiceWith(cache);
 
         EnergyDashboardSummaryResource first = queryService.getDashboardSummary(USER_ID);
+        long databaseQueriesAfterFirstCall = mockingDetails(energyReadingRepository).getInvocations().size();
         EnergyDashboardSummaryResource second = queryService.getDashboardSummary(USER_ID);
 
         assertThat(second).isEqualTo(first);
         assertThat(cache.store).containsKey("consumption:7:summary");
         verify(deviceControlContextFacade, times(1)).findDevicesByUserId(USER_ID);
-        verify(energyReadingRepository, times(1))
-                .findByUserIdAndRecordedAtBetweenOrderByRecordedAtDesc(any(), any(), any());
+        assertThat(mockingDetails(energyReadingRepository).getInvocations()).hasSize((int) databaseQueriesAfterFirstCall);
     }
 
     @Test
@@ -123,7 +125,8 @@ class ConsumptionSummaryCacheTest {
                 alertRepository,
                 new CurrentConsumptionService(),
                 summaryCache,
-                new EnergyCostCalculator(new ConfigurableTariffProvider(new BigDecimal("0.75")))
+                new EnergyCostCalculator(new ConfigurableTariffProvider(new BigDecimal("0.75"))),
+                new MonthlyCostProjectionService()
         );
     }
 
