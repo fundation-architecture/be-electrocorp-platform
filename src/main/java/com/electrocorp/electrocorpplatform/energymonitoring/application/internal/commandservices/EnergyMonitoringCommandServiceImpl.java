@@ -1,7 +1,7 @@
 package com.electrocorp.electrocorpplatform.energymonitoring.application.internal.commandservices;
 
 import com.electrocorp.electrocorpplatform.energymonitoring.application.commandservices.EnergyMonitoringCommandService;
-import com.electrocorp.electrocorpplatform.energymonitoring.application.services.EnergyMonitoringApplicationService;
+import com.electrocorp.electrocorpplatform.energymonitoring.application.services.EnergyReadingIngestionService;
 import com.electrocorp.electrocorpplatform.energymonitoring.application.services.EnergySamplingSettingsService;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.aggregates.EnergyReading;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.commands.CreateEnergyReadingCommand;
@@ -12,12 +12,12 @@ import org.springframework.stereotype.Service;
 @Service
 @RequiredArgsConstructor
 public class EnergyMonitoringCommandServiceImpl implements EnergyMonitoringCommandService {
-    private final EnergyMonitoringApplicationService applicationService;
+    private final EnergyReadingIngestionService ingestionService;
     private final EnergySamplingSettingsService settingsService;
 
     @Override
     public EnergyReading handle(CreateEnergyReadingCommand command) {
-        return applicationService.createReading(command);
+        return ingestionService.createReading(command);
     }
 
     @Override
