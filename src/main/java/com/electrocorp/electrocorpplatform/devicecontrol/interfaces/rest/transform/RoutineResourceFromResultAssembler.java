@@ -6,24 +6,11 @@ import com.electrocorp.electrocorpplatform.devicecontrol.interfaces.rest.resourc
 public class RoutineResourceFromResultAssembler {
     public static RoutineResource toResourceFromResult(RoutineDetails details) {
         var routine = details.routine();
-        return new RoutineResource(
-                routine.getId(),
-                routine.getUserId(),
-                routine.getDeviceId(),
-                routine.getGroupId(),
-                routine.getTargetType(),
-                routine.getTargetId(),
+        return RoutineResource.from(
+                routine,
                 details.targetName(),
-                routine.getName(),
-                routine.getAction(),
-                routine.getTime(),
-                routine.getEffectiveRepeatType(),
-                routine.getDaysOfWeek(),
-                routine.getEffectiveIntervalDays(),
-                routine.getStartsOn(),
                 details.applicableDeviceCount(),
-                details.blockedDeviceCount(),
-                routine.getEnabled()
+                details.blockedDeviceCount()
         );
     }
 }

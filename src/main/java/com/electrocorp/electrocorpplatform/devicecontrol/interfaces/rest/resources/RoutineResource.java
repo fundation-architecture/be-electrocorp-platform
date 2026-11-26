@@ -1,5 +1,7 @@
 package com.electrocorp.electrocorpplatform.devicecontrol.interfaces.rest.resources;
 
+import java.time.ZoneId;
+
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.aggregates.Routine;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.RoutineAction;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.RoutineRepeatType;
@@ -22,7 +24,9 @@ public record RoutineResource(
         String startsOn,
         Integer applicableDeviceCount,
         Integer blockedDeviceCount,
-        Boolean enabled
+        Boolean enabled,
+        String timeZone,
+        String lastExecutedAt
 ) {
     public static RoutineResource from(
             Routine routine,
@@ -47,7 +51,9 @@ public record RoutineResource(
                 routine.getStartsOn(),
                 applicableDeviceCount,
                 blockedDeviceCount,
-                routine.getEnabled()
+                routine.getEnabled(),
+                ZoneId.systemDefault().getId(),
+                routine.getLastExecutedAt() == null ? null : routine.getLastExecutedAt().toString()
         );
     }
 
