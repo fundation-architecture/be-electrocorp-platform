@@ -27,6 +27,9 @@ public class ConsumptionLimitSteps {
     private Long deviceId;
     private HttpResponse<String> lastResponse;
     private int consumptionAlertsBefore;
+    private HttpResponse<String> alertsResponse;
+    private String firstUserToken;
+    private Long firstUserDeviceId;
 
     @Dado("que el usuario está autenticado y tiene un dispositivo vinculado")
     public void userIsAuthenticatedWithADevice() {
@@ -94,6 +97,80 @@ public class ConsumptionLimitSteps {
         assertThat(api.json(api.get(token, "/api/v1/alerts/rules"))).isEmpty();
     }
 
+    // ---------- US-21 · Consulta del centro de notificaciones ----------
+
+    @Cuando("el usuario consulta su centro de notificaciones")
+    public void checksTheNotificationCenter() {
+        alertsResponse = api.get(token, "/api/v1/alerts");
+    }
+
+    @Entonces("encuentra una alerta de consumo elevado asociada al dispositivo")
+    public void findsAHighConsumptionAlert() {
+        assertThat(alertsResponse.statusCode()).isEqualTo(200);
+        JsonNode alert = firstConsumptionAlert(api.json(alertsResponse), deviceId);
+        assertThat(alert).isNotNull();
+        assertThat(alert.get("sourceType").asText()).isEqualTo("DEVICE");
+        assertThat(alert.get("sourceLabel").asText()).isEqualTo(DEVICE_NAME);
+    }
+
+    @Y("la alerta contiene información para identificar la situación detectada")
+    public void theAlertDescribesTheSituation() {
+        JsonNode alert = firstConsumptionAlert(api.json(alertsResponse), deviceId);
+        assertThat(alert.get("level").asText()).isNotBlank();
+        assertThat(alert.get("evidence").asText()).isNotBlank();
+        assertThat(alert.get("recommendedAction").asText()).isNotBlank();
+        assertThat(alert.get("lastTriggeredAt").asText()).isNotBlank();
+    }
+
+    @Y("filtra sus notificaciones por ese dispositivo")
+    public void filtersByDevice() {
+        alertsResponse = api.get(token, "/api/v1/alerts?deviceId=" + deviceId);
+    }
+
+    @Entonces("solo recibe alertas de ese dispositivo")
+    public void onlyReceivesAlertsOfTheDevice() {
+        assertThat(alertsResponse.statusCode()).isEqualTo(200);
+        JsonNode alerts = api.json(alertsResponse);
+        assertThat(alerts).isNotEmpty();
+        assertThat(alerts).allSatisfy(alert -> assertThat(alert.get("sourceId").asText()).isEqualTo(String.valueOf(deviceId)));
+    }
+
+    @Dado("que el usuario recién registrado no tiene alertas de dispositivos")
+    public void newUserWithoutDeviceAlerts() {
+        token = api.registerAndSignInNewUser();
+    }
+
+    @Cuando("consulta sus alertas de consumo")
+    public void checksConsumptionAlerts() {
+        alertsResponse = api.get(token, "/api/v1/alerts?sourceType=DEVICE");
+    }
+
+    @Entonces("el sistema devuelve una lista vacía sin error")
+    public void returnsAnEmptyList() {
+        assertThat(alertsResponse.statusCode()).isEqualTo(200);
+        assertThat(api.json(alertsResponse)).isEmpty();
+    }
+
+    @Dado("que existe una alerta de consumo elevado de otro usuario")
+    public void anotherUserHasAnAlert() {
+        theDeviceHasAnActiveLimit(1000);
+        aReadingIsRegistered(1200);
+        firstUserToken = token;
+        firstUserDeviceId = deviceId;
+        assertThat(consumptionAlertsOfDevice(firstUserToken, firstUserDeviceId)).isEqualTo(1);
+    }
+
+    @Y("un segundo usuario inicia sesión")
+    public void aSecondUserSignsIn() {
+        token = api.registerAndSignInNewUser();
+    }
+
+    @Entonces("la respuesta no incluye la alerta del otro usuario")
+    public void doesNotIncludeTheOtherUsersAlert() {
+        assertThat(alertsResponse.statusCode()).isEqualTo(200);
+        assertThat(firstConsumptionAlert(api.json(alertsResponse), firstUserDeviceId)).isNull();
+    }
+
     private HttpResponse<String> createLimit(int watts) {
         return api.send("POST", "/api/v1/alerts/rules", token, """
                 {
@@ -116,6 +193,15 @@ public class ConsumptionLimitSteps {
             }
         }
         return count;
+    }
+
+    private JsonNode firstConsumptionAlert(JsonNode alerts, Long device) {
+        for (JsonNode alert : alerts) {
+            if (isConsumptionAlertOf(alert, device)) {
+                return alert;
+            }
+        }
+        return null;
     }
 
     private boolean isConsumptionAlertOf(JsonNode alert, Long device) {
