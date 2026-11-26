@@ -36,8 +36,13 @@ public class NotificationController {
 
     @Operation(summary = "Listar las alertas del usuario", description = "Devuelve las alertas in-app del usuario autenticado, incluidas las de consumo elevado (US-20).")
     @GetMapping("/alerts")
-    public List<AlertResource> getAlerts() {
-        return queryService.handle(new GetAlertsByUserQuery(requireAlertManagement())).stream()
+    public List<AlertResource> getAlerts(
+            @RequestParam(required = false) Long deviceId,
+            @RequestParam(required = false) String sourceType,
+            @RequestParam(required = false) String eventType,
+            @RequestParam(required = false) Boolean active
+    ) {
+        return queryService.handle(new GetAlertsByUserQuery(requireAlertManagement(), deviceId, sourceType, eventType, active)).stream()
                 .map(AlertResourceFromEntityAssembler::toResourceFromEntity)
                 .toList();
     }
