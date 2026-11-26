@@ -132,7 +132,9 @@ public class EnergyMonitoringApplicationService {
                 buildRoomConsumption(todayReadings, activeDevices, devices),
                 buildActiveDeviceDetails(activeDevices),
                 EnergyCostCalculator.CURRENCY,
-                EnergyCostCalculator.CURRENCY_SYMBOL
+                EnergyCostCalculator.CURRENCY_SYMBOL,
+                today.withDayOfMonth(1),
+                today
         );
     }
 
