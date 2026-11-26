@@ -6,11 +6,13 @@ import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.command
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.queries.GetEnergyDashboardSummaryQuery;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.queries.GetEnergyReadingsByUserQuery;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.queries.GetEnergySamplingSettingsQuery;
+import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.queries.GetPeriodCostSummaryQuery;
 import com.electrocorp.electrocorpplatform.energymonitoring.interfaces.rest.resources.CreateEnergyReadingResource;
 import com.electrocorp.electrocorpplatform.energymonitoring.interfaces.rest.resources.EnergyDashboardSummaryResource;
 import com.electrocorp.electrocorpplatform.energymonitoring.interfaces.rest.resources.EnergyReadingResource;
 import com.electrocorp.electrocorpplatform.energymonitoring.interfaces.rest.resources.UpdateEnergySamplingSettingsResource;
 import com.electrocorp.electrocorpplatform.energymonitoring.interfaces.rest.resources.EnergySamplingSettingsResource;
+import com.electrocorp.electrocorpplatform.energymonitoring.interfaces.rest.resources.PeriodCostSummaryResource;
 import com.electrocorp.electrocorpplatform.energymonitoring.interfaces.rest.transform.CreateEnergyReadingCommandFromResourceAssembler;
 import com.electrocorp.electrocorpplatform.energymonitoring.interfaces.rest.transform.EnergyReadingResourceFromEntityAssembler;
 import com.electrocorp.electrocorpplatform.iam.application.security.AccessAuthorizationService;
@@ -19,6 +21,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
@@ -62,6 +65,15 @@ public class EnergyMonitoringController {
     @GetMapping("/dashboard-summary")
     public EnergyDashboardSummaryResource getDashboardSummary() {
         return queryService.handle(new GetEnergyDashboardSummaryQuery(requireEnergyAccess()));
+    }
+
+    @Operation(summary = "Consultar el gasto acumulado del periodo", description = "Devuelve los kWh y el costo acumulado en soles (S/) del periodo, con el detalle por dispositivo (US-17). Sin parametros usa el mes en curso hasta hoy; from y to aceptan fechas yyyy-MM-dd.")
+    @GetMapping("/period-summary")
+    public PeriodCostSummaryResource getPeriodCostSummary(
+            @RequestParam(name = "from", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(name = "to", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
+    ) {
+        return queryService.handle(new GetPeriodCostSummaryQuery(requireEnergyAccess(), from, to));
     }
 
     @Operation(summary = "Consultar el intervalo de muestreo", description = "Devuelve cada cuantos segundos el planificador registra lecturas de los dispositivos encendidos.")
