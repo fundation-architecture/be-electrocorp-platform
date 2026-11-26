@@ -7,6 +7,8 @@ import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.aggrega
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.queries.GetEnergyDashboardSummaryQuery;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.queries.GetEnergyReadingsByUserQuery;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.queries.GetEnergySamplingSettingsQuery;
+import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.queries.GetPeriodCostSummaryQuery;
+import com.electrocorp.electrocorpplatform.energymonitoring.interfaces.rest.resources.PeriodCostSummaryResource;
 import com.electrocorp.electrocorpplatform.energymonitoring.interfaces.rest.resources.EnergyDashboardSummaryResource;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -36,5 +38,10 @@ public class EnergyMonitoringQueryServiceImpl implements EnergyMonitoringQuerySe
     @Override
     public Integer handle(GetEnergySamplingSettingsQuery query) {
         return settingsService.getSampleSeconds();
+    }
+
+    @Override
+    public PeriodCostSummaryResource handle(GetPeriodCostSummaryQuery query) {
+        return applicationService.getPeriodCostSummary(query.userId(), query.from(), query.to());
     }
 }

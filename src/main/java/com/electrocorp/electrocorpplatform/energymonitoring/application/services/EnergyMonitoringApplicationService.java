@@ -10,6 +10,7 @@ import com.electrocorp.electrocorpplatform.energymonitoring.domain.services.Curr
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.services.EnergyCostCalculator;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.services.MonthlyCostProjectionService;
 import com.electrocorp.electrocorpplatform.energymonitoring.interfaces.rest.resources.EnergyDashboardSummaryResource;
+import com.electrocorp.electrocorpplatform.energymonitoring.interfaces.rest.resources.PeriodCostSummaryResource;
 import com.electrocorp.electrocorpplatform.notifications.application.facades.ActiveAlertsOverview;
 import com.electrocorp.electrocorpplatform.notifications.application.facades.NotificationsContextFacade;
 import lombok.RequiredArgsConstructor;
@@ -37,6 +38,8 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class EnergyMonitoringApplicationService {
 
+    private static final int MAX_PERIOD_DAYS = 366;
+
     private final EnergyReadingRepository energyReadingRepository;
     private final DeviceControlContextFacade deviceControlContextFacade;
     private final NotificationsContextFacade notificationsContextFacade;
@@ -62,6 +65,69 @@ public class EnergyMonitoringApplicationService {
             consumptionSummaryCache.put(userId, summary);
             return summary;
         });
+    }
+
+    /**
+     * Gasto acumulado de un periodo (US-17). Sin fechas, el periodo es el mes en curso hasta hoy.
+     * El costo se calcula con la tarifa vigente de TariffProvider sobre los kWh registrados.
+     */
+    @Transactional(readOnly = true)
+    public PeriodCostSummaryResource getPeriodCostSummary(Long userId, LocalDate from, LocalDate to) {
+        LocalDate today = LocalDate.now();
+        LocalDate periodEnd = to != null ? to : today;
+        LocalDate periodStart = from != null ? from : periodEnd.withDayOfMonth(1);
+
+        if (periodStart.isAfter(periodEnd)) {
+            throw new IllegalArgumentException("The period start date must be before or equal to the end date.");
+        }
+        if (periodStart.plusDays(MAX_PERIOD_DAYS).isBefore(periodEnd)) {
+            throw new IllegalArgumentException("The period cannot be longer than " + MAX_PERIOD_DAYS + " days.");
+        }
+
+        List<EnergyReading> readings = energyReadingRepository.findByUserIdAndRecordedAtBetweenOrderByRecordedAtDesc(
+                userId,
+                periodStart.atStartOfDay(),
+                periodEnd.plusDays(1).atStartOfDay().minusNanos(1)
+        );
+
+        BigDecimal kilowattHours = readings.stream()
+                .map(this::safeKilowattHours)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(6, RoundingMode.HALF_UP);
+        BigDecimal accumulatedCost = energyCostCalculator.costOf(kilowattHours);
+        int days = (int) java.time.temporal.ChronoUnit.DAYS.between(periodStart, periodEnd) + 1;
+
+        List<PeriodCostSummaryResource.DeviceCost> devices = readings.stream()
+                .collect(Collectors.groupingBy(EnergyReading::getDeviceId))
+                .entrySet()
+                .stream()
+                .map(entry -> {
+                    BigDecimal deviceKilowattHours = entry.getValue().stream()
+                            .map(this::safeKilowattHours)
+                            .reduce(BigDecimal.ZERO, BigDecimal::add)
+                            .setScale(6, RoundingMode.HALF_UP);
+                    return new PeriodCostSummaryResource.DeviceCost(
+                            entry.getKey(),
+                            entry.getValue().get(0).getDeviceName(),
+                            deviceKilowattHours,
+                            energyCostCalculator.costOf(deviceKilowattHours)
+                    );
+                })
+                .sorted(Comparator.comparing(PeriodCostSummaryResource.DeviceCost::accumulatedCost).reversed())
+                .toList();
+
+        return new PeriodCostSummaryResource(
+                periodStart,
+                periodEnd,
+                days,
+                kilowattHours,
+                accumulatedCost,
+                accumulatedCost.divide(BigDecimal.valueOf(days), 2, RoundingMode.HALF_UP),
+                readings.size(),
+                EnergyCostCalculator.CURRENCY,
+                EnergyCostCalculator.CURRENCY_SYMBOL,
+                devices
+        );
     }
 
     private EnergyDashboardSummaryResource buildDashboardSummary(Long userId) {
@@ -132,7 +198,9 @@ public class EnergyMonitoringApplicationService {
                 buildRoomConsumption(todayReadings, activeDevices, devices),
                 buildActiveDeviceDetails(activeDevices),
                 EnergyCostCalculator.CURRENCY,
-                EnergyCostCalculator.CURRENCY_SYMBOL
+                EnergyCostCalculator.CURRENCY_SYMBOL,
+                today.withDayOfMonth(1),
+                today
         );
     }
 
