@@ -34,7 +34,7 @@ public class NotificationController {
     private final NotificationQueryService queryService;
     private final AccessAuthorizationService accessAuthorizationService;
 
-    @Operation(summary = "Listar las alertas del usuario", description = "Devuelve las alertas in-app del usuario autenticado, incluidas las de consumo elevado (US-20).")
+    @Operation(summary = "Consultar el centro de notificaciones", description = "Devuelve solo las alertas del usuario autenticado, de la mas reciente a la mas antigua, con el dispositivo (sourceId, sourceLabel) y la situacion detectada (level, evidence, recommendedAction). Filtros opcionales: deviceId, sourceType, eventType y active. Lista vacia si no hay alertas. US-20 y US-21.")
     @GetMapping("/alerts")
     public List<AlertResource> getAlerts(
             @RequestParam(required = false) Long deviceId,
@@ -93,7 +93,7 @@ public class NotificationController {
                 .toList();
     }
 
-    @Operation(summary = "Crear una regla de alerta", description = "Configura un limite de consumo (por ejemplo, WATTS GREATER_THAN 2000) para un dispositivo, ambiente o sede.")
+    @Operation(summary = "Configurar un limite de consumo", description = "Guarda una regla de alerta para un dispositivo, ambiente o sede. Para un limite de potencia usar metric WATTS y conditionType GREATER_THAN (se supera cuando la lectura es estrictamente mayor); el umbral debe ser mayor que cero. Energy Monitoring aplica el menor limite activo del dispositivo al evaluar cada lectura. US-19.")
     @PostMapping("/alerts/rules")
     public AlertRuleResource createRule(@Valid @RequestBody CreateAlertRuleResource request) {
         var command = CreateAlertRuleCommandFromResourceAssembler.toCommandFromResource(request, requireAlertManagement());

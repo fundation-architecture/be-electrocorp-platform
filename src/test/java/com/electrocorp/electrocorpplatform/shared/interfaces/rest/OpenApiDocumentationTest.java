@@ -42,9 +42,29 @@ class OpenApiDocumentationTest {
                 .isEqualTo("Registrar una lectura de consumo");
         assertThat(operation(paths, "/api/v1/alerts", "get").get("tags").get(0).asText())
                 .isEqualTo("Notifications");
-        assertThat(operation(paths, "/api/v1/alerts/rules", "post").get("summary").asText())
-                .isEqualTo("Crear una regla de alerta");
         assertThat(operation(paths, "/api/v1/notifications/preferences", "put")).isNotNull();
+    }
+
+    @Test
+    void sprintThreeEndpointsAreDocumented() throws Exception {
+        HttpResponse<String> response = HttpClient.newHttpClient().send(
+                HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/v3/api-docs")).GET().build(),
+                HttpResponse.BodyHandlers.ofString()
+        );
+        JsonNode paths = new ObjectMapper().readTree(response.body()).get("paths");
+
+        assertThat(operation(paths, "/api/v1/routines", "post").get("summary").asText())
+                .isEqualTo("Registrar una programacion de encendido o apagado");
+        assertThat(operation(paths, "/api/v1/routines/{routineId}", "patch").get("summary").asText())
+                .isEqualTo("Modificar una programacion existente");
+        assertThat(operation(paths, "/api/v1/routines", "post").get("tags").get(0).asText())
+                .isEqualTo("Device Control");
+        assertThat(operation(paths, "/api/v1/energy-readings/period-summary", "get").get("summary").asText())
+                .isEqualTo("Consultar el gasto acumulado del periodo");
+        assertThat(operation(paths, "/api/v1/alerts/rules", "post").get("summary").asText())
+                .isEqualTo("Configurar un limite de consumo");
+        assertThat(operation(paths, "/api/v1/alerts", "get").get("parameters").toString())
+                .contains("deviceId", "sourceType", "eventType", "active");
     }
 
     private JsonNode operation(JsonNode paths, String path, String method) {

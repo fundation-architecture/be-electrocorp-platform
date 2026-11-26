@@ -35,12 +35,15 @@ import com.electrocorp.electrocorpplatform.devicecontrol.interfaces.rest.resourc
 import com.electrocorp.electrocorpplatform.devicecontrol.interfaces.rest.transform.*;
 import com.electrocorp.electrocorpplatform.iam.application.security.AccessAuthorizationService;
 import com.electrocorp.electrocorpplatform.iam.domain.model.AccessPermission;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+@Tag(name = "Device Control", description = "Dispositivos, control remoto y programaciones de encendido y apagado")
 @RestController
 @RequestMapping("/api/v1")
 @RequiredArgsConstructor
@@ -100,6 +103,7 @@ public class DeviceControlController {
         commandService.handle(new DeleteDeviceCommand(requireDeviceManagement(), deviceId));
     }
 
+    @Operation(summary = "Listar las programaciones del usuario", description = "Devuelve las rutinas de encendido y apagado con su hora local (timeZone), la ultima ejecucion (lastExecutedAt) y su resultado (lastExecutionStatus: EXECUTED, PARTIAL o NOT_APPLIED). US-11.")
     @GetMapping("/routines")
     public List<RoutineResource> getRoutines() {
         return queryService.handle(new GetRoutinesQuery(requireRoutineManagement())).stream()
@@ -107,6 +111,7 @@ public class DeviceControlController {
                 .toList();
     }
 
+    @Operation(summary = "Registrar una programacion de encendido o apagado", description = "Registra una rutina para un dispositivo, grupo, ambiente o sede: accion TURN_ON o TURN_OFF, hora HH:mm en la zona de la plataforma (America/Lima) y repeticion ONCE, DAILY, WEEKLY o CUSTOM_INTERVAL. Responde 409 si ya existe una rutina con el mismo objetivo, hora y accion. US-11.")
     @PostMapping("/routines")
     public RoutineResource createRoutine(
             @Valid @RequestBody CreateRoutineResource request
@@ -116,6 +121,7 @@ public class DeviceControlController {
         return RoutineResourceFromResultAssembler.toResourceFromResult(routine);
     }
 
+    @Operation(summary = "Modificar una programacion existente", description = "Cambia la hora, la accion o la repeticion de una rutina del usuario; los campos omitidos se conservan. La nueva hora rige desde el cambio: una hora ya pasada del dia espera al dia siguiente. Responde 404 si la rutina no pertenece al usuario. US-12.")
     @PatchMapping("/routines/{routineId}")
     public RoutineResource updateRoutine(
             @PathVariable Long routineId,
@@ -135,6 +141,7 @@ public class DeviceControlController {
         return RoutineResourceFromResultAssembler.toResourceFromResult(routine);
     }
 
+    @Operation(summary = "Activar o desactivar una programacion", description = "Habilita o deshabilita la rutina sin cambiar su horario.")
     @PatchMapping("/routines/{routineId}/status")
     public RoutineResource updateRoutineStatus(
             @PathVariable Long routineId,
@@ -145,6 +152,7 @@ public class DeviceControlController {
         return RoutineResourceFromResultAssembler.toResourceFromResult(routine);
     }
 
+    @Operation(summary = "Eliminar una programacion", description = "Elimina la rutina indicada del usuario autenticado.")
     @DeleteMapping("/routines/{routineId}")
     public void deleteRoutine(
             @PathVariable Long routineId
@@ -152,6 +160,7 @@ public class DeviceControlController {
         commandService.handle(new DeleteRoutineCommand(requireRoutineManagement(), routineId));
     }
 
+    @Operation(summary = "Ejecutar una programacion ahora", description = "Aplica de inmediato la accion de la rutina a sus dispositivos disponibles, por el mismo flujo de comandos que usa el planificador.")
     @PatchMapping("/routines/{routineId}/execute")
     public RoutineResource executeRoutine(
             @PathVariable Long routineId
