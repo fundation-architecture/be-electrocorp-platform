@@ -6,6 +6,8 @@ import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.commands.D
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.commands.DeleteDeviceGroupCommand;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.commands.DeleteRoutineCommand;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.commands.ExecuteRoutineCommand;
+import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.commands.UpdateRoutineCommand;
+import com.electrocorp.electrocorpplatform.devicecontrol.interfaces.rest.resources.UpdateRoutineResource;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.commands.ActivateOperationModeCommand;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.commands.ArchiveOperationModeCommand;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.commands.ToggleDeviceCommand;
@@ -111,6 +113,25 @@ public class DeviceControlController {
     ) {
         var command = CreateRoutineCommandFromResourceAssembler.toCommandFromResource(request, requireRoutineManagement());
         var routine = commandService.handle(command);
+        return RoutineResourceFromResultAssembler.toResourceFromResult(routine);
+    }
+
+    @PatchMapping("/routines/{routineId}")
+    public RoutineResource updateRoutine(
+            @PathVariable Long routineId,
+            @RequestBody UpdateRoutineResource request
+    ) {
+        var routine = commandService.handle(new UpdateRoutineCommand(
+                requireRoutineManagement(),
+                routineId,
+                request.name(),
+                request.action(),
+                request.time(),
+                request.repeatType(),
+                request.daysOfWeek(),
+                request.intervalDays(),
+                request.startsOn()
+        ));
         return RoutineResourceFromResultAssembler.toResourceFromResult(routine);
     }
 

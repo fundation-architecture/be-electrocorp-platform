@@ -1,6 +1,9 @@
 package com.electrocorp.electrocorpplatform.acceptance;
 
 import com.electrocorp.electrocorpplatform.devicecontrol.application.services.DeviceControlApplicationService;
+import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.aggregates.Routine;
+import com.electrocorp.electrocorpplatform.devicecontrol.domain.repositories.RoutineRepository;
+import com.electrocorp.electrocorpplatform.devicecontrol.domain.services.RoutineSchedulePolicyService;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.cucumber.java.es.Cuando;
 import io.cucumber.java.es.Dado;
@@ -10,6 +13,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 import java.net.http.HttpResponse;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -28,6 +32,12 @@ public class RoutineSchedulingSteps {
 
     @Autowired
     private DeviceControlApplicationService deviceControlApplicationService;
+
+    @Autowired
+    private RoutineRepository routineRepository;
+
+    @Autowired
+    private RoutineSchedulePolicyService routineSchedulePolicyService;
 
     private String token;
     private Long deviceId;
@@ -110,12 +120,85 @@ public class RoutineSchedulingSteps {
                 """.formatted(deviceId, deviceId, action, time));
     }
 
-    String token() {
-        return token;
+    // ---------- US-12 · Modificación de programación existente ----------
+
+    @Y("tiene una programación de {word} para las {word}")
+    public void hasASchedule(String action, String time) {
+        HttpResponse<String> response = createRoutine(actionCode(action), time);
+        assertThat(response.statusCode()).isEqualTo(200);
+        routine = api.json(response);
     }
 
-    Long deviceId() {
-        return deviceId;
+    @Cuando("cambia el horario a las {word}")
+    public void changesTheTime(String time) {
+        lastResponse = updateRoutine(token, "{\"time\":\"%s\"}".formatted(time));
+    }
+
+    @Cuando("cambia la acción programada a {word}")
+    public void changesTheAction(String action) {
+        lastResponse = updateRoutine(token, "{\"action\":\"%s\"}".formatted(actionCode(action)));
+    }
+
+    @Entonces("el sistema guarda la programación con la hora {word} y la acción {word}")
+    public void savesTheChanges(String time, String action) {
+        assertThat(lastResponse.statusCode()).isEqualTo(200);
+        JsonNode updated = api.json(lastResponse);
+        assertThat(updated.get("id").asLong()).isEqualTo(routine.get("id").asLong());
+        assertThat(updated.get("time").asText()).isEqualTo(time);
+        assertThat(updated.get("action").asText()).isEqualTo(actionCode(action));
+    }
+
+    @Y("el planificador no ejecuta la programación a las {word} del día siguiente")
+    public void theSchedulerDoesNotRunAt(String time) {
+        assertThat(runSchedulerAt(time)).isFalse();
+        assertThat(deviceStatus()).isEqualTo("ON");
+    }
+
+    @Y("el planificador ejecuta la programación a las {word} del día siguiente y el dispositivo queda {word}")
+    public void theSchedulerRunsAt(String time, String expectedStatus) {
+        assertThat(runSchedulerAt(time)).isTrue();
+        assertThat(deviceStatus()).isEqualTo(expectedStatus);
+    }
+
+    @Cuando("otro usuario intenta cambiar el horario de esa programación a las {word}")
+    public void anotherUserTriesToChangeTheSchedule(String time) {
+        String otherToken = api.registerAndSignInNewUser();
+        lastResponse = updateRoutine(otherToken, "{\"time\":\"%s\"}".formatted(time));
+    }
+
+    @Entonces("el sistema rechaza la operación y conserva la hora {word}")
+    public void rejectsTheOperation(String originalTime) {
+        assertThat(lastResponse.statusCode()).isEqualTo(404);
+        JsonNode stored = api.json(api.get(token, "/api/v1/routines")).get(0);
+        assertThat(stored.get("time").asText()).isEqualTo(originalTime);
+    }
+
+    /**
+     * Aplica la misma regla que RoutineSchedulerService: la rutina se ejecuta solo si
+     * RoutineSchedulePolicyService la considera pendiente a esa hora.
+     */
+    private boolean runSchedulerAt(String time) {
+        Long userId = routine.get("userId").asLong();
+        Long routineId = routine.get("id").asLong();
+        LocalDateTime moment = LocalDate.now().plusDays(1).atTime(LocalTime.parse(time));
+        Routine stored = routineRepository.findByIdAndUserId(routineId, userId).orElseThrow();
+        if (!routineSchedulePolicyService.isDue(stored, moment)) {
+            return false;
+        }
+        deviceControlApplicationService.executeScheduledRoutine(userId, routineId, moment);
+        return true;
+    }
+
+    private HttpResponse<String> updateRoutine(String userToken, String body) {
+        return api.send("PATCH", "/api/v1/routines/" + routine.get("id").asLong(), userToken, body);
+    }
+
+    private String actionCode(String action) {
+        return switch (action) {
+            case "apagado" -> "TURN_OFF";
+            case "encendido" -> "TURN_ON";
+            default -> action;
+        };
     }
 
     private String deviceStatus() {

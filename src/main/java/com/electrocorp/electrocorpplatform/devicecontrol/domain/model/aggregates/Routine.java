@@ -68,6 +68,10 @@ public class Routine extends AuditableEntity {
     @Column(name = "last_execution_message", length = 255)
     private String lastExecutionMessage;
 
+    /** Momento en que se cambio por ultima vez el horario (US-12). */
+    @Column(name = "schedule_changed_at")
+    private LocalDateTime scheduleChangedAt;
+
     public void toggle() {
         this.enabled = this.enabled == null || !this.enabled;
     }
@@ -96,6 +100,20 @@ public class Routine extends AuditableEntity {
         this.lastExecutionStatus = status;
         this.lastExecutionMessage = message;
         markExecutedAt(executedAt);
+    }
+
+    /**
+     * Fecha desde la que cuentan las ocurrencias del horario vigente: la creacion de la rutina o
+     * su ultima modificacion de horario. Las ocurrencias anteriores no se ejecutan.
+     */
+    public LocalDateTime getScheduleEffectiveFrom() {
+        if (scheduleChangedAt == null) {
+            return getCreatedAt();
+        }
+        if (getCreatedAt() == null || scheduleChangedAt.isAfter(getCreatedAt())) {
+            return scheduleChangedAt;
+        }
+        return getCreatedAt();
     }
 
     public RoutineRepeatType getEffectiveRepeatType() {

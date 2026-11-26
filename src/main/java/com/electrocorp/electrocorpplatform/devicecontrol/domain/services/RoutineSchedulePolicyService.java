@@ -227,7 +227,8 @@ public class RoutineSchedulePolicyService {
     }
 
     private boolean wasCreatedBeforeOccurrence(Routine routine, LocalDateTime scheduledAt) {
-        return routine.getCreatedAt() == null || !scheduledAt.isBefore(routine.getCreatedAt());
+        LocalDateTime effectiveFrom = routine.getScheduleEffectiveFrom();
+        return effectiveFrom == null || !scheduledAt.isBefore(effectiveFrom);
     }
 
     private boolean hasNotExecutedOccurrence(Routine routine, LocalDateTime scheduledAt) {

@@ -24,6 +24,7 @@ import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.commands.U
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.commands.UpdateDeviceGroupCommand;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.commands.UpdateDeviceStatusCommand;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.commands.UpdateRoutineStatusCommand;
+import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.commands.UpdateRoutineCommand;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -70,6 +71,11 @@ public class DeviceControlCommandServiceImpl implements DeviceControlCommandServ
     @Override
     public RoutineDetails handle(Long routineId, Long userId, UpdateRoutineStatusCommand command) {
         return applicationService.updateRoutineStatus(userId, routineId, command);
+    }
+
+    @Override
+    public RoutineDetails handle(UpdateRoutineCommand command) {
+        return applicationService.updateRoutine(command);
     }
 
     @Override
