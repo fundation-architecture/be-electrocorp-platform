@@ -1,6 +1,9 @@
 package com.electrocorp.electrocorpplatform.energymonitoring.application.services;
 
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.factories.EnergyReadingFactory;
+import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.EnergyReadingStatus;
+import com.electrocorp.electrocorpplatform.notifications.application.facades.ActiveAlertsOverview;
+import com.electrocorp.electrocorpplatform.notifications.application.facades.NotificationsContextFacade;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.aggregates.EnergyReading;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.model.events.EnergyThresholdExceededEvent;
 import com.electrocorp.electrocorpplatform.energymonitoring.domain.specifications.HighConsumptionSpecification;
@@ -10,6 +13,7 @@ import org.mockito.ArgumentCaptor;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -26,7 +30,7 @@ class EnergyThresholdMonitorTest {
     private final HighConsumptionSpecification specification = new HighConsumptionSpecification(new BigDecimal("1000"));
     private final EnergyReadingFactory factory = new EnergyReadingFactory(specification);
     private final DomainEventPublisher publisher = mock(DomainEventPublisher.class);
-    private final EnergyThresholdMonitor monitor = new EnergyThresholdMonitor(publisher, specification);
+    private final EnergyThresholdMonitor monitor = new EnergyThresholdMonitor(publisher, specification, userId -> null);
 
     @Test
     void readingAboveTheConfiguredLimitPublishesTheEventOnceWithUserAndDevice() {
@@ -51,6 +55,53 @@ class EnergyThresholdMonitorTest {
 
         assertThat(published).isFalse();
         verify(publisher, never()).publish(any());
+    }
+
+    @Test
+    void readingAboveTheUserLimitIsMarkedHighAndCarriesThatLimit() {
+        NotificationsContextFacade limits = new NotificationsContextFacade() {
+            @Override
+            public ActiveAlertsOverview getActiveAlertsOverview(Long userId) {
+                return ActiveAlertsOverview.empty();
+            }
+
+            @Override
+            public Optional<BigDecimal> findConsumptionLimitWatts(Long userId, Long deviceId) {
+                return Optional.of(new BigDecimal("600"));
+            }
+        };
+        EnergyThresholdMonitor monitorWithUserLimit = new EnergyThresholdMonitor(publisher, specification, limits);
+        EnergyReading reading = reading(new BigDecimal("750"));
+
+        monitorWithUserLimit.applyUserLimit(reading);
+        boolean published = monitorWithUserLimit.publishIfExceeded(reading);
+
+        ArgumentCaptor<EnergyThresholdExceededEvent> captor = ArgumentCaptor.forClass(EnergyThresholdExceededEvent.class);
+        verify(publisher, times(1)).publish(captor.capture());
+        assertThat(published).isTrue();
+        assertThat(reading.getStatus()).isEqualTo(EnergyReadingStatus.HIGH);
+        assertThat(captor.getValue().thresholdWatts()).isEqualByComparingTo("600");
+    }
+
+    @Test
+    void readingBelowTheUserLimitStaysNormal() {
+        EnergyThresholdMonitor monitorWithUserLimit = new EnergyThresholdMonitor(publisher, specification, new NotificationsContextFacade() {
+            @Override
+            public ActiveAlertsOverview getActiveAlertsOverview(Long userId) {
+                return ActiveAlertsOverview.empty();
+            }
+
+            @Override
+            public Optional<BigDecimal> findConsumptionLimitWatts(Long userId, Long deviceId) {
+                return Optional.of(new BigDecimal("600"));
+            }
+        });
+        EnergyReading reading = reading(new BigDecimal("450"));
+
+        monitorWithUserLimit.applyUserLimit(reading);
+
+        assertThat(reading.getStatus()).isEqualTo(EnergyReadingStatus.NORMAL);
+        assertThat(monitorWithUserLimit.publishIfExceeded(reading)).isFalse();
     }
 
     private EnergyReading reading(BigDecimal watts) {

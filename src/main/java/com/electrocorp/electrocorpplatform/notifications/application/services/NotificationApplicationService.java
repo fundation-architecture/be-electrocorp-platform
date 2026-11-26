@@ -15,6 +15,7 @@ import com.electrocorp.electrocorpplatform.notifications.domain.model.valueobjec
 import com.electrocorp.electrocorpplatform.notifications.domain.model.valueobjects.QuietHours;
 import com.electrocorp.electrocorpplatform.notifications.domain.repositories.*;
 import com.electrocorp.electrocorpplatform.notifications.domain.services.AlertPolicyService;
+import com.electrocorp.electrocorpplatform.notifications.domain.services.AlertRulePolicyService;
 import com.electrocorp.electrocorpplatform.notifications.domain.services.AlertSourceOwnershipService;
 import com.electrocorp.electrocorpplatform.notifications.domain.services.NotificationDeliveryPolicyService;
 import com.electrocorp.electrocorpplatform.notifications.domain.services.NotificationPreferencePolicyService;
@@ -45,6 +46,7 @@ public class NotificationApplicationService {
     private final NotificationPreferencePolicyService notificationPreferencePolicyService;
     private final NotificationDeliveryPolicyService notificationDeliveryPolicyService;
     private final NotificationDeliveryPort notificationDeliveryPort;
+    private final AlertRulePolicyService alertRulePolicyService;
     private final AlertFactory alertFactory = new AlertFactory();
 
     @Transactional
@@ -221,6 +223,7 @@ public class NotificationApplicationService {
 
     @Transactional
     public AlertRule createRule(CreateAlertRuleCommand command) {
+        alertRulePolicyService.validateRule(command.name(), command.metric(), command.conditionType(), command.threshold());
         AlertRule rule = new AlertRule();
         rule.setUserId(command.userId());
         rule.setName(command.name());

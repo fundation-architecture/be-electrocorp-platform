@@ -47,6 +47,7 @@ public class EnergyReadingIngestionService {
                 sampleSeconds,
                 LocalDateTime.now()
         );
+        energyThresholdMonitor.applyUserLimit(reading);
         EnergyReading savedReading = energyReadingRepository.save(reading);
         consumptionSummaryCache.evict(savedReading.getUserId());
         energyThresholdMonitor.publishIfExceeded(savedReading);
