@@ -79,7 +79,7 @@ class ConsumptionSummaryCacheTest {
                 energyReadingRepository,
                 deviceControlContextFacade,
                 new EnergyReadingFactory(),
-                new EnergyThresholdMonitor(mock(DomainEventPublisher.class), new HighConsumptionSpecification()),
+                new EnergyThresholdMonitor(mock(DomainEventPublisher.class), new HighConsumptionSpecification(), userId -> null),
                 cache,
                 new EnergyCostCalculator(new ConfigurableTariffProvider(new BigDecimal("0.75")))
         );
