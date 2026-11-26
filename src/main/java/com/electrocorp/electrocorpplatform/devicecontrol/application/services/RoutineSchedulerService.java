@@ -8,8 +8,14 @@ import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
 
+/**
+ * Ejecuta las rutinas de encendido y apagado programadas (US-11). La hora se toma del reloj de la
+ * plataforma (electrocorp.time-zone, America/Lima por defecto) para que una rutina de las 19:00 se
+ * ejecute a las 19:00 hora del usuario aunque el servidor trabaje en UTC.
+ */
 @Service
 @RequiredArgsConstructor
 public class RoutineSchedulerService {
@@ -19,13 +25,14 @@ public class RoutineSchedulerService {
     private final RoutineRepository routineRepository;
     private final RoutineSchedulePolicyService routineSchedulePolicyService;
     private final DeviceControlApplicationService deviceControlApplicationService;
+    private final Clock platformClock;
 
     @Scheduled(
             fixedDelayString = "${electrocorp.routines.scheduler-delay-ms:60000}",
             initialDelayString = "${electrocorp.routines.scheduler-initial-delay-ms:30000}"
     )
     public void executeDueRoutines() {
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(platformClock);
 
         routineRepository.findByEnabledTrue()
                 .stream()
