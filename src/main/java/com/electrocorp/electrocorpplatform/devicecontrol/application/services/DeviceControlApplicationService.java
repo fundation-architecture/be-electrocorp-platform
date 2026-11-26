@@ -49,6 +49,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.Arrays;
 import java.util.Optional;
@@ -483,6 +484,11 @@ public class DeviceControlApplicationService {
         String daysOfWeek = command.daysOfWeek() != null ? command.daysOfWeek().trim() : routine.getDaysOfWeek();
         Integer intervalDays = command.intervalDays() != null ? command.intervalDays() : routine.getEffectiveIntervalDays();
         String startsOn = command.startsOn() != null ? command.startsOn().trim() : routine.getStartsOn();
+        boolean scheduleChanged = !Objects.equals(time, routine.getTime())
+                || repeatType != routine.getEffectiveRepeatType()
+                || !Objects.equals(daysOfWeek, routine.getDaysOfWeek())
+                || !Objects.equals(intervalDays, routine.getEffectiveIntervalDays())
+                || !Objects.equals(startsOn, routine.getStartsOn());
 
         routineSchedulePolicyService.validateSchedule(time, repeatType, daysOfWeek, intervalDays, startsOn);
 
@@ -497,6 +503,9 @@ public class DeviceControlApplicationService {
         routine.setDaysOfWeek(repeatType == RoutineRepeatType.WEEKLY && daysOfWeek != null ? daysOfWeek : "");
         routine.setIntervalDays(repeatType == RoutineRepeatType.CUSTOM_INTERVAL ? intervalDays : 1);
         routine.setStartsOn(startsOn);
+        if (scheduleChanged) {
+            routine.setScheduleChangedAt(LocalDateTime.now());
+        }
 
         List<Routine> otherRoutines = routineRepository.findByUserId(command.userId()).stream()
                 .filter(existing -> !existing.getId().equals(routine.getId()))
