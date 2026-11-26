@@ -22,6 +22,7 @@ import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.commands.U
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.commands.UpdateDeviceGroupCommand;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.commands.UpdateDeviceStatusCommand;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.commands.UpdateRoutineStatusCommand;
+import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.commands.UpdateRoutineCommand;
 
 public interface DeviceControlCommandService {
     Device handle(CreateDeviceCommand command);
@@ -32,6 +33,7 @@ public interface DeviceControlCommandService {
     void handle(DeleteDeviceCommand command);
     RoutineDetails handle(CreateRoutineCommand command);
     RoutineDetails handle(Long routineId, Long userId, UpdateRoutineStatusCommand command);
+    RoutineDetails handle(UpdateRoutineCommand command);
     RoutineDetails handle(ExecuteRoutineCommand command);
     void handle(DeleteRoutineCommand command);
     DeviceGroupDetails handle(CreateDeviceGroupCommand command);

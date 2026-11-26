@@ -16,6 +16,7 @@ public class AlertRulePolicyService {
 
     private static final Set<String> ALLOWED_CONDITIONS = Set.of(
             "GREATER_THAN",
+            "GREATER_OR_EQUAL_THAN",
             "LESS_THAN",
             "EQUALS"
     );
@@ -35,6 +36,10 @@ public class AlertRulePolicyService {
 
         if (threshold == null || threshold.compareTo(BigDecimal.ZERO) < 0) {
             throw new IllegalArgumentException("Alert rule threshold must be zero or greater.");
+        }
+
+        if ("WATTS".equalsIgnoreCase(metric) && threshold.signum() == 0) {
+            throw new IllegalArgumentException("A consumption limit in watts must be greater than zero.");
         }
     }
 

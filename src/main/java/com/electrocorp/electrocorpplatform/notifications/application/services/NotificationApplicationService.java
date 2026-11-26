@@ -15,6 +15,7 @@ import com.electrocorp.electrocorpplatform.notifications.domain.model.valueobjec
 import com.electrocorp.electrocorpplatform.notifications.domain.model.valueobjects.QuietHours;
 import com.electrocorp.electrocorpplatform.notifications.domain.repositories.*;
 import com.electrocorp.electrocorpplatform.notifications.domain.services.AlertPolicyService;
+import com.electrocorp.electrocorpplatform.notifications.domain.services.AlertRulePolicyService;
 import com.electrocorp.electrocorpplatform.notifications.domain.services.AlertSourceOwnershipService;
 import com.electrocorp.electrocorpplatform.notifications.domain.services.NotificationDeliveryPolicyService;
 import com.electrocorp.electrocorpplatform.notifications.domain.services.NotificationPreferencePolicyService;
@@ -28,6 +29,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeParseException;
 import java.math.BigDecimal;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 
@@ -45,10 +47,15 @@ public class NotificationApplicationService {
     private final NotificationPreferencePolicyService notificationPreferencePolicyService;
     private final NotificationDeliveryPolicyService notificationDeliveryPolicyService;
     private final NotificationDeliveryPort notificationDeliveryPort;
+    private final AlertRulePolicyService alertRulePolicyService;
     private final AlertFactory alertFactory = new AlertFactory();
 
     @Transactional
     public List<Alert> getAlerts(Long userId) {
+        if (userId == null) {
+            return List.of();
+        }
+
         List<Alert> alerts = alertRepository.findByUserId(userId);
 
         for (Alert alert : alerts) {
@@ -58,7 +65,14 @@ public class NotificationApplicationService {
             }
         }
 
-        return alerts;
+        // Centro de notificaciones (US-21): solo alertas del usuario, de la mas reciente a la mas antigua.
+        return alerts.stream()
+                .filter(alert -> userId.equals(alert.getUserId()))
+                .sorted(Comparator.comparing(
+                        (Alert alert) -> alert.getLastTriggeredAt() != null ? alert.getLastTriggeredAt() : alert.getFirstDetectedAt(),
+                        Comparator.nullsLast(Comparator.reverseOrder())
+                ))
+                .toList();
     }
 
     @Transactional
@@ -221,6 +235,7 @@ public class NotificationApplicationService {
 
     @Transactional
     public AlertRule createRule(CreateAlertRuleCommand command) {
+        alertRulePolicyService.validateRule(command.name(), command.metric(), command.conditionType(), command.threshold());
         AlertRule rule = new AlertRule();
         rule.setUserId(command.userId());
         rule.setName(command.name());

@@ -161,6 +161,7 @@ public class EnergyReadingRecorderService {
                     cursor
             );
 
+            energyThresholdMonitor.applyUserLimit(reading);
             savedReading = energyReadingRepository.save(reading);
             energyThresholdMonitor.publishIfExceeded(savedReading);
             remainingSeconds -= sampleSeconds;

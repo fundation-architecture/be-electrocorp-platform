@@ -1,0 +1,212 @@
+package com.electrocorp.electrocorpplatform.acceptance;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import io.cucumber.java.es.Cuando;
+import io.cucumber.java.es.Dado;
+import io.cucumber.java.es.Entonces;
+import io.cucumber.java.es.Y;
+import org.springframework.beans.factory.annotation.Autowired;
+
+import java.net.http.HttpResponse;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * Pasos de las pruebas de aceptacion de US-19 (limite de consumo) y US-21 (centro de notificaciones).
+ * El limite configurado (1000 W) es menor que el limite general de la plataforma (1800 W), de modo que
+ * una alerta por una lectura de 1001 W solo aparece si se aplica el limite del usuario.
+ */
+public class ConsumptionLimitSteps {
+
+    private static final String DEVICE_NAME = "Aire acondicionado";
+
+    @Autowired
+    private SprintTwoApiClient api;
+
+    private String token;
+    private Long deviceId;
+    private HttpResponse<String> lastResponse;
+    private int consumptionAlertsBefore;
+    private HttpResponse<String> alertsResponse;
+    private String firstUserToken;
+    private Long firstUserDeviceId;
+
+    @Dado("que el usuario está autenticado y tiene un dispositivo vinculado")
+    public void userIsAuthenticatedWithADevice() {
+        token = api.registerAndSignInNewUser();
+        deviceId = api.createDevice(token, DEVICE_NAME, 2500);
+    }
+
+    @Cuando("configura un límite de potencia de {int} W para ese dispositivo")
+    public void configuresAPowerLimit(int watts) {
+        lastResponse = createLimit(watts);
+    }
+
+    @Entonces("el sistema guarda el límite en watts asociado al dispositivo")
+    public void savesTheLimit() {
+        assertThat(lastResponse.statusCode()).isEqualTo(200);
+        JsonNode rule = api.json(lastResponse);
+        assertThat(rule.get("metric").asText()).isEqualTo("WATTS");
+        assertThat(rule.get("threshold").decimalValue()).isEqualByComparingTo("1000");
+        assertThat(rule.get("scopeType").asText()).isEqualTo("DEVICE");
+        assertThat(rule.get("scopeId").asText()).isEqualTo(String.valueOf(deviceId));
+    }
+
+    @Y("mantiene activa la regla asociada al dispositivo")
+    public void keepsTheRuleActive() {
+        JsonNode rules = api.json(api.get(token, "/api/v1/alerts/rules"));
+        assertThat(rules).hasSize(1);
+        assertThat(rules.get(0).get("enabled").asBoolean()).isTrue();
+    }
+
+    @Dado("que el dispositivo tiene una regla activa con un límite de {int} W")
+    public void theDeviceHasAnActiveLimit(int watts) {
+        userIsAuthenticatedWithADevice();
+        assertThat(createLimit(watts).statusCode()).isEqualTo(200);
+    }
+
+    @Y("no existen alertas previas de consumo para el dispositivo")
+    public void thereAreNoPreviousAlerts() {
+        consumptionAlertsBefore = consumptionAlertsOfDevice(token, deviceId);
+        assertThat(consumptionAlertsBefore).isZero();
+    }
+
+    @Cuando("se registra una lectura de {int} W para ese dispositivo")
+    public void aReadingIsRegistered(int watts) {
+        lastResponse = api.registerReading(token, deviceId, DEVICE_NAME, watts);
+        assertThat(lastResponse.statusCode()).isEqualTo(200);
+    }
+
+    @Entonces("se generan {int} alertas nuevas por consumo elevado para esa lectura")
+    public void alertsAreGenerated(int expectedAlerts) {
+        assertThat(consumptionAlertsOfDevice(token, deviceId) - consumptionAlertsBefore).isEqualTo(expectedAlerts);
+    }
+
+    @Cuando("intenta configurar un límite de potencia negativo")
+    public void triesANegativeLimit() {
+        lastResponse = createLimit(-100);
+    }
+
+    @Entonces("el sistema rechaza la configuración")
+    public void rejectsTheConfiguration() {
+        assertThat(lastResponse.statusCode()).isEqualTo(400);
+    }
+
+    @Y("no crea ninguna regla para el dispositivo")
+    public void doesNotCreateARule() {
+        assertThat(api.json(api.get(token, "/api/v1/alerts/rules"))).isEmpty();
+    }
+
+    // ---------- US-21 · Consulta del centro de notificaciones ----------
+
+    @Cuando("el usuario consulta su centro de notificaciones")
+    public void checksTheNotificationCenter() {
+        alertsResponse = api.get(token, "/api/v1/alerts");
+    }
+
+    @Entonces("encuentra una alerta de consumo elevado asociada al dispositivo")
+    public void findsAHighConsumptionAlert() {
+        assertThat(alertsResponse.statusCode()).isEqualTo(200);
+        JsonNode alert = firstConsumptionAlert(api.json(alertsResponse), deviceId);
+        assertThat(alert).isNotNull();
+        assertThat(alert.get("sourceType").asText()).isEqualTo("DEVICE");
+        assertThat(alert.get("sourceLabel").asText()).isEqualTo(DEVICE_NAME);
+    }
+
+    @Y("la alerta contiene información para identificar la situación detectada")
+    public void theAlertDescribesTheSituation() {
+        JsonNode alert = firstConsumptionAlert(api.json(alertsResponse), deviceId);
+        assertThat(alert.get("level").asText()).isNotBlank();
+        assertThat(alert.get("evidence").asText()).isNotBlank();
+        assertThat(alert.get("recommendedAction").asText()).isNotBlank();
+        assertThat(alert.get("lastTriggeredAt").asText()).isNotBlank();
+    }
+
+    @Y("filtra sus notificaciones por ese dispositivo")
+    public void filtersByDevice() {
+        alertsResponse = api.get(token, "/api/v1/alerts?deviceId=" + deviceId);
+    }
+
+    @Entonces("solo recibe alertas de ese dispositivo")
+    public void onlyReceivesAlertsOfTheDevice() {
+        assertThat(alertsResponse.statusCode()).isEqualTo(200);
+        JsonNode alerts = api.json(alertsResponse);
+        assertThat(alerts).isNotEmpty();
+        assertThat(alerts).allSatisfy(alert -> assertThat(alert.get("sourceId").asText()).isEqualTo(String.valueOf(deviceId)));
+    }
+
+    @Dado("que el usuario recién registrado no tiene alertas de dispositivos")
+    public void newUserWithoutDeviceAlerts() {
+        token = api.registerAndSignInNewUser();
+    }
+
+    @Cuando("consulta sus alertas de consumo")
+    public void checksConsumptionAlerts() {
+        alertsResponse = api.get(token, "/api/v1/alerts?sourceType=DEVICE");
+    }
+
+    @Entonces("el sistema devuelve una lista vacía sin error")
+    public void returnsAnEmptyList() {
+        assertThat(alertsResponse.statusCode()).isEqualTo(200);
+        assertThat(api.json(alertsResponse)).isEmpty();
+    }
+
+    @Dado("que existe una alerta de consumo elevado de otro usuario")
+    public void anotherUserHasAnAlert() {
+        theDeviceHasAnActiveLimit(1000);
+        aReadingIsRegistered(1200);
+        firstUserToken = token;
+        firstUserDeviceId = deviceId;
+        assertThat(consumptionAlertsOfDevice(firstUserToken, firstUserDeviceId)).isEqualTo(1);
+    }
+
+    @Y("un segundo usuario inicia sesión")
+    public void aSecondUserSignsIn() {
+        token = api.registerAndSignInNewUser();
+    }
+
+    @Entonces("la respuesta no incluye la alerta del otro usuario")
+    public void doesNotIncludeTheOtherUsersAlert() {
+        assertThat(alertsResponse.statusCode()).isEqualTo(200);
+        assertThat(firstConsumptionAlert(api.json(alertsResponse), firstUserDeviceId)).isNull();
+    }
+
+    private HttpResponse<String> createLimit(int watts) {
+        return api.send("POST", "/api/v1/alerts/rules", token, """
+                {
+                  "name": "Limite del aire acondicionado",
+                  "metric": "WATTS",
+                  "conditionType": "GREATER_THAN",
+                  "threshold": %d,
+                  "level": "WARNING",
+                  "scopeType": "DEVICE",
+                  "scopeId": "%d"
+                }
+                """.formatted(watts, deviceId));
+    }
+
+    private int consumptionAlertsOfDevice(String userToken, Long device) {
+        int count = 0;
+        for (JsonNode alert : api.json(api.get(userToken, "/api/v1/alerts"))) {
+            if (isConsumptionAlertOf(alert, device)) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private JsonNode firstConsumptionAlert(JsonNode alerts, Long device) {
+        for (JsonNode alert : alerts) {
+            if (isConsumptionAlertOf(alert, device)) {
+                return alert;
+            }
+        }
+        return null;
+    }
+
+    private boolean isConsumptionAlertOf(JsonNode alert, Long device) {
+        String threadKey = alert.path("threadKey").asText();
+        return String.valueOf(device).equals(alert.path("sourceId").asText())
+                && (threadKey.startsWith("ENERGY:") || threadKey.startsWith("RULE:"));
+    }
+}

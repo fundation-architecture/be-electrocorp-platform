@@ -3,6 +3,7 @@ package com.electrocorp.electrocorpplatform.energymonitoring.interfaces.rest.res
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 
 @Schema(description = "Resumen del panel de consumo energetico del usuario (US-13, US-16 y US-18).")
@@ -39,7 +40,11 @@ public record EnergyDashboardSummaryResource(
         @Schema(description = "Codigo ISO 4217 de la moneda de los costos.", example = "PEN")
         String currency,
         @Schema(description = "Simbolo de la moneda de los costos.", example = "S/")
-        String currencySymbol
+        String currencySymbol,
+        @Schema(description = "Primer dia del periodo de monthToDateCost: inicio del mes calendario en la zona horaria de la plataforma.", example = "2026-11-01")
+        LocalDate monthToDatePeriodStart,
+        @Schema(description = "Ultimo dia del periodo de monthToDateCost (hoy).", example = "2026-11-26")
+        LocalDate monthToDatePeriodEnd
 ) {
     public record TrendPoint(
             String label,

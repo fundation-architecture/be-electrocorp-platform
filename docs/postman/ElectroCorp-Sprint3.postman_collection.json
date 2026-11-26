@@ -1,0 +1,745 @@
+{
+  "info": {
+    "name": "ElectroCorp - Sprint 3 (Device Control, Energy Monitoring y Notifications)",
+    "description": "Peticiones que evidencian las operaciones del Sprint 3: US-11 (programacion de horarios), US-12 (modificacion de programaciones), US-17 (gasto acumulado del periodo), US-19 (limite de consumo) y US-21 (centro de notificaciones). Ejecutar las carpetas en orden: la coleccion guarda token, secondToken, deviceId y routineId en variables. \"Ejecutar ahora\" aplica la rutina por el mismo flujo de comandos del planificador; la ejecucion a la hora programada la realiza RoutineSchedulerService (zona America/Lima).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "email",
+      "value": "sprint3.demo@example.com"
+    },
+    {
+      "key": "secondEmail",
+      "value": "sprint3.segundo@example.com"
+    },
+    {
+      "key": "password",
+      "value": "Secur3Pass"
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "secondToken",
+      "value": ""
+    },
+    {
+      "key": "deviceId",
+      "value": ""
+    },
+    {
+      "key": "routineId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "0. Preparacion",
+      "item": [
+        {
+          "name": "Registrar usuario",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/auth/sign-up",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Usuario Demo Sprint 3\",\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}"
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Iniciar sesion",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/auth/sign-in",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}"
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('token', pm.response.json().token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear dispositivo",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/devices",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Aire acondicionado\",\n  \"room\": \"Sala\",\n  \"type\": \"Climatizacion\",\n  \"powerWatts\": 2500\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('deviceId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Encender dispositivo",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/devices/{{deviceId}}/toggle"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Dispositivo encendido', () => pm.expect(pm.response.json().status).to.eql('ON'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Registrar segundo usuario",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/auth/sign-up",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Segundo Usuario\",\n  \"email\": \"{{secondEmail}}\",\n  \"password\": \"{{password}}\"\n}"
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Iniciar sesion del segundo usuario",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/auth/sign-in",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{secondEmail}}\",\n  \"password\": \"{{password}}\"\n}"
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('secondToken', pm.response.json().token);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "US-11 Programacion de horarios",
+      "item": [
+        {
+          "name": "Registrar programacion de apagado 18:00",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/routines",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deviceId\": \"{{deviceId}}\",\n  \"targetType\": \"DEVICE\",\n  \"targetId\": \"{{deviceId}}\",\n  \"name\": \"Apagar el aire\",\n  \"action\": \"TURN_OFF\",\n  \"time\": \"18:00\",\n  \"repeatType\": \"DAILY\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json(); pm.collectionVariables.set('routineId', r.id);",
+                  "pm.test('Zona horaria America/Lima', () => pm.expect(r.timeZone).to.eql('America/Lima'));",
+                  "pm.test('Programacion activa', () => pm.expect(r.enabled).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Registrar la misma programacion (duplicada)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/routines",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deviceId\": \"{{deviceId}}\",\n  \"targetType\": \"DEVICE\",\n  \"targetId\": \"{{deviceId}}\",\n  \"name\": \"Apagar el aire\",\n  \"action\": \"TURN_OFF\",\n  \"time\": \"18:00\",\n  \"repeatType\": \"DAILY\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Responde 409', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar programaciones",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/routines"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Responde 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ejecutar la programacion ahora",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/routines/{{routineId}}/execute"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Resultado EXECUTED', () => pm.expect(pm.response.json().lastExecutionStatus).to.eql('EXECUTED'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ver el dispositivo apagado",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/devices"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const d = pm.response.json().find(x => String(x.id) === String(pm.collectionVariables.get('deviceId')));",
+                  "pm.test('Dispositivo apagado', () => pm.expect(d.status).to.eql('OFF'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "US-12 Modificacion de programacion",
+      "item": [
+        {
+          "name": "Cambiar el horario a 19:00",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/routines/{{routineId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"time\": \"19:00\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Nuevo horario', () => pm.expect(pm.response.json().time).to.eql('19:00'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cambiar la accion a encendido",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/routines/{{routineId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"TURN_ON\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Nueva accion', () => pm.expect(pm.response.json().action).to.eql('TURN_ON'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Intentar modificarla con el segundo usuario",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/routines/{{routineId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"time\": \"20:00\"\n}"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{secondToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Responde 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "US-17 Gasto acumulado del periodo",
+      "item": [
+        {
+          "name": "Registrar lectura de 2 kWh (S/ 1.50)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/energy-readings",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deviceId\": \"{{deviceId}}\",\n  \"deviceName\": \"Aire acondicionado\",\n  \"watts\": 2000,\n  \"sampleSeconds\": 3600\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Responde 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Registrar lectura de 3 kWh (S/ 2.25)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/energy-readings",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deviceId\": \"{{deviceId}}\",\n  \"deviceName\": \"Aire acondicionado\",\n  \"watts\": 3000,\n  \"sampleSeconds\": 3600\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Responde 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Gasto acumulado en el resumen del panel",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/energy-readings/dashboard-summary"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                  "const s = pm.response.json();",
+                  "pm.test('monthToDateCost en soles con su periodo', () => { pm.expect(s.currencySymbol).to.eql('S/'); pm.expect(s).to.have.property('monthToDatePeriodStart'); pm.expect(s).to.have.property('monthToDatePeriodEnd'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Gasto acumulado del mes en curso (detalle)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/energy-readings/period-summary"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Incluye el detalle por dispositivo', () => pm.expect(pm.response.json().devices.length).to.be.above(0));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Gasto acumulado de un periodo anterior",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/energy-readings/period-summary?from=2026-10-01&to=2026-10-31"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Sin lecturas del mes actual', () => pm.expect(Number(pm.response.json().accumulatedCost)).to.eql(0));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Periodo invalido",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/energy-readings/period-summary?from=2026-11-20&to=2026-11-01"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "US-19 Limite de consumo",
+      "item": [
+        {
+          "name": "Configurar limite de 1000 W",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/alerts/rules",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Limite del aire\",\n  \"metric\": \"WATTS\",\n  \"conditionType\": \"GREATER_THAN\",\n  \"threshold\": 1000,\n  \"level\": \"WARNING\",\n  \"scopeType\": \"DEVICE\",\n  \"scopeId\": \"{{deviceId}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Regla activa', () => pm.expect(pm.response.json().enabled).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Configurar limite negativo (invalido)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/alerts/rules",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Limite invalido\",\n  \"metric\": \"WATTS\",\n  \"conditionType\": \"GREATER_THAN\",\n  \"threshold\": -100,\n  \"scopeType\": \"DEVICE\",\n  \"scopeId\": \"{{deviceId}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Lectura de 999 W (bajo el limite)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/energy-readings",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deviceId\": \"{{deviceId}}\",\n  \"deviceName\": \"Aire acondicionado\",\n  \"watts\": 999\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Lectura NORMAL', () => pm.expect(pm.response.json().status).to.eql('NORMAL'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Lectura de 1200 W (sobre el limite)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/energy-readings",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deviceId\": \"{{deviceId}}\",\n  \"deviceName\": \"Aire acondicionado\",\n  \"watts\": 1200\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Lectura HIGH', () => pm.expect(pm.response.json().status).to.eql('HIGH'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "US-21 Centro de notificaciones",
+      "item": [
+        {
+          "name": "Consultar el centro de notificaciones",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/alerts"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                  "const deviceId = String(pm.collectionVariables.get('deviceId'));",
+                  "pm.test('Existe la alerta de consumo elevado del dispositivo', () => pm.expect(pm.response.json().some(a => a.sourceId === deviceId && (a.threadKey.startsWith('RULE:') || a.threadKey.startsWith('ENERGY:')))).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Filtrar por dispositivo",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/alerts?deviceId={{deviceId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                  "const deviceId = String(pm.collectionVariables.get('deviceId'));",
+                  "pm.test('Solo alertas del dispositivo', () => pm.expect(pm.response.json().every(a => a.sourceId === deviceId)).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Segundo usuario: alertas de dispositivos",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/alerts?sourceType=DEVICE",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{secondToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Lista vacia', () => pm.expect(pm.response.json().length).to.eql(0));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

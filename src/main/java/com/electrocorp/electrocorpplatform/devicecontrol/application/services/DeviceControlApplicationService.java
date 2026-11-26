@@ -13,6 +13,7 @@ import com.electrocorp.electrocorpplatform.devicecontrol.application.facades.Dev
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.DeviceStatus;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.OperationModeStatus;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.RoutineAction;
+import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.RoutineExecutionStatus;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.RoutineRepeatType;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.aggregates.Routine;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.events.DeviceCreatedEvent;
@@ -26,6 +27,9 @@ import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.RoutineTar
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.services.DevicePairingCatalogService;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.services.DevicePolicyService;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.services.RoutineSchedulePolicyService;
+import com.electrocorp.electrocorpplatform.devicecontrol.domain.services.RoutineConflictCheckerService;
+import com.electrocorp.electrocorpplatform.shared.domain.exceptions.ConflictException;
+import com.electrocorp.electrocorpplatform.shared.domain.exceptions.ResourceNotFoundException;
 import com.electrocorp.electrocorpplatform.energymonitoring.application.services.EnergyReadingRecorderService;
 import com.electrocorp.electrocorpplatform.notifications.domain.repositories.AlertRuleProfileRepository;
 import com.electrocorp.electrocorpplatform.notifications.domain.repositories.NotificationPreferenceRepository;
@@ -45,6 +49,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.Arrays;
 import java.util.Optional;
@@ -71,6 +76,7 @@ public class DeviceControlApplicationService {
     private final DevicePairingCatalogService devicePairingCatalogService;
     private final DevicePolicyService devicePolicyService;
     private final RoutineSchedulePolicyService routineSchedulePolicyService;
+    private final RoutineConflictCheckerService routineConflictCheckerService;
 
     @Transactional(readOnly = true)
     public List<Device> getDevices(Long userId) {
@@ -455,9 +461,60 @@ public class DeviceControlApplicationService {
         routine.setStartsOn(command.startsOn() != null ? command.startsOn().trim() : null);
         routine.setEnabled(true);
 
+        if (routineConflictCheckerService.hasConflict(routineRepository.findByUserId(command.userId()), routine)) {
+            throw new ConflictException("A routine with the same target, time and action already exists.");
+        }
+
         Routine savedRoutine = routineRepository.save(routine);
 
         return toRoutineDetails(savedRoutine);
+    }
+
+    /**
+     * Modifica el horario, la accion o la repeticion de una programacion del usuario (US-12).
+     * Una programacion de otro usuario se trata como inexistente.
+     */
+    @Transactional
+    public RoutineDetails updateRoutine(UpdateRoutineCommand command) {
+        Routine routine = routineRepository.findByIdAndUserId(command.routineId(), command.userId())
+                .orElseThrow(() -> new ResourceNotFoundException("Routine not found."));
+
+        String time = command.time() != null ? command.time().trim() : routine.getTime();
+        RoutineRepeatType repeatType = command.repeatType() != null ? command.repeatType() : routine.getEffectiveRepeatType();
+        String daysOfWeek = command.daysOfWeek() != null ? command.daysOfWeek().trim() : routine.getDaysOfWeek();
+        Integer intervalDays = command.intervalDays() != null ? command.intervalDays() : routine.getEffectiveIntervalDays();
+        String startsOn = command.startsOn() != null ? command.startsOn().trim() : routine.getStartsOn();
+        boolean scheduleChanged = !Objects.equals(time, routine.getTime())
+                || repeatType != routine.getEffectiveRepeatType()
+                || !Objects.equals(daysOfWeek, routine.getDaysOfWeek())
+                || !Objects.equals(intervalDays, routine.getEffectiveIntervalDays())
+                || !Objects.equals(startsOn, routine.getStartsOn());
+
+        routineSchedulePolicyService.validateSchedule(time, repeatType, daysOfWeek, intervalDays, startsOn);
+
+        if (command.name() != null && !command.name().isBlank()) {
+            routine.setName(command.name().trim());
+        }
+        if (command.action() != null) {
+            routine.setAction(command.action());
+        }
+        routine.setTime(time);
+        routine.setRepeatType(repeatType);
+        routine.setDaysOfWeek(repeatType == RoutineRepeatType.WEEKLY && daysOfWeek != null ? daysOfWeek : "");
+        routine.setIntervalDays(repeatType == RoutineRepeatType.CUSTOM_INTERVAL ? intervalDays : 1);
+        routine.setStartsOn(startsOn);
+        if (scheduleChanged) {
+            routine.setScheduleChangedAt(LocalDateTime.now());
+        }
+
+        List<Routine> otherRoutines = routineRepository.findByUserId(command.userId()).stream()
+                .filter(existing -> !existing.getId().equals(routine.getId()))
+                .toList();
+        if (routineConflictCheckerService.hasConflict(otherRoutines, routine)) {
+            throw new ConflictException("A routine with the same target, time and action already exists.");
+        }
+
+        return toRoutineDetails(routineRepository.save(routine));
     }
 
     @Transactional
@@ -482,15 +539,15 @@ public class DeviceControlApplicationService {
 
     @Transactional
     public RoutineDetails executeRoutine(Long userId, Long routineId) {
-        return executeRoutineInternal(userId, routineId, LocalDateTime.now());
+        return executeRoutineInternal(userId, routineId, LocalDateTime.now(), false);
     }
 
     @Transactional
     public RoutineDetails executeScheduledRoutine(Long userId, Long routineId, LocalDateTime executedAt) {
-        return executeRoutineInternal(userId, routineId, executedAt != null ? executedAt : LocalDateTime.now());
+        return executeRoutineInternal(userId, routineId, executedAt != null ? executedAt : LocalDateTime.now(), true);
     }
 
-    private RoutineDetails executeRoutineInternal(Long userId, Long routineId, LocalDateTime executedAt) {
+    private RoutineDetails executeRoutineInternal(Long userId, Long routineId, LocalDateTime executedAt, boolean scheduled) {
         Routine routine = routineRepository.findByIdAndUserId(routineId, userId)
                 .orElseThrow(() -> new IllegalArgumentException("Routine not found."));
 
@@ -498,13 +555,23 @@ public class DeviceControlApplicationService {
             throw new IllegalArgumentException("Inactive routines cannot be executed.");
         }
 
-        List<Device> applicableDevices = getRoutineScopedDevices(routine)
+        List<Device> scopedDevices = getRoutineScopedDevices(routine);
+        List<Device> applicableDevices = scopedDevices
                 .stream()
                 .filter(Device::canReceiveOperationalChanges)
                 .toList();
 
         if (applicableDevices.isEmpty()) {
-            throw new IllegalArgumentException("Routine has no applicable devices.");
+            if (!scheduled) {
+                throw new IllegalArgumentException("Routine has no applicable devices.");
+            }
+
+            routine.recordExecution(
+                    RoutineExecutionStatus.NOT_APPLIED,
+                    "Ningun dispositivo pudo recibir el comando (mantenimiento, retirado o sin dispositivos).",
+                    executedAt
+            );
+            return toRoutineDetails(routineRepository.save(routine));
         }
 
         applicableDevices.forEach(device -> {
@@ -520,7 +587,13 @@ public class DeviceControlApplicationService {
             energyReadingRecorderService.recordStatusTransition(DeviceSnapshot.from(savedDevice), previousStatus == DeviceStatus.ON);
         });
 
-        routine.markExecutedAt(executedAt);
+        int blockedDevices = scopedDevices.size() - applicableDevices.size();
+        routine.recordExecution(
+                blockedDevices == 0 ? RoutineExecutionStatus.EXECUTED : RoutineExecutionStatus.PARTIAL,
+                "Comando %s aplicado a %d de %d dispositivos.".formatted(
+                        routine.getAction(), applicableDevices.size(), scopedDevices.size()),
+                executedAt
+        );
         Routine savedRoutine = routineRepository.save(routine);
 
         return toRoutineDetails(savedRoutine);
