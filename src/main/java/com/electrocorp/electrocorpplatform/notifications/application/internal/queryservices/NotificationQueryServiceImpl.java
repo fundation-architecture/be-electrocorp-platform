@@ -10,6 +10,7 @@ import com.electrocorp.electrocorpplatform.notifications.domain.model.queries.Ev
 import com.electrocorp.electrocorpplatform.notifications.domain.model.queries.GetAlertRulesByUserQuery;
 import com.electrocorp.electrocorpplatform.notifications.domain.model.queries.GetAlertRuleProfilesByUserQuery;
 import com.electrocorp.electrocorpplatform.notifications.domain.model.queries.GetAlertsByUserQuery;
+import com.electrocorp.electrocorpplatform.notifications.domain.model.valueobjects.AlertSourceType;
 import com.electrocorp.electrocorpplatform.notifications.domain.model.queries.GetNotificationPreferenceQuery;
 import com.electrocorp.electrocorpplatform.notifications.domain.model.results.RuleEvaluationResult;
 import lombok.RequiredArgsConstructor;
@@ -24,7 +25,16 @@ public class NotificationQueryServiceImpl implements NotificationQueryService {
 
     @Override
     public List<Alert> handle(GetAlertsByUserQuery query) {
-        return applicationService.getAlerts(query.userId());
+        return applicationService.getAlerts(query.userId()).stream()
+                .filter(alert -> query.deviceId() == null
+                        || (alert.getSourceType() == AlertSourceType.DEVICE
+                        && String.valueOf(query.deviceId()).equals(alert.getSourceId())))
+                .filter(alert -> query.sourceType() == null
+                        || (alert.getSourceType() != null && alert.getSourceType().name().equalsIgnoreCase(query.sourceType())))
+                .filter(alert -> query.eventType() == null
+                        || (alert.getEventType() != null && alert.getEventType().name().equalsIgnoreCase(query.eventType())))
+                .filter(alert -> query.active() == null || query.active().equals(alert.getActive()))
+                .toList();
     }
 
     @Override

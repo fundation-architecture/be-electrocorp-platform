@@ -29,6 +29,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeParseException;
 import java.math.BigDecimal;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 
@@ -51,6 +52,10 @@ public class NotificationApplicationService {
 
     @Transactional
     public List<Alert> getAlerts(Long userId) {
+        if (userId == null) {
+            return List.of();
+        }
+
         List<Alert> alerts = alertRepository.findByUserId(userId);
 
         for (Alert alert : alerts) {
@@ -60,7 +65,14 @@ public class NotificationApplicationService {
             }
         }
 
-        return alerts;
+        // Centro de notificaciones (US-21): solo alertas del usuario, de la mas reciente a la mas antigua.
+        return alerts.stream()
+                .filter(alert -> userId.equals(alert.getUserId()))
+                .sorted(Comparator.comparing(
+                        (Alert alert) -> alert.getLastTriggeredAt() != null ? alert.getLastTriggeredAt() : alert.getFirstDetectedAt(),
+                        Comparator.nullsLast(Comparator.reverseOrder())
+                ))
+                .toList();
     }
 
     @Transactional
