@@ -61,6 +61,13 @@ public class Routine extends AuditableEntity {
     @Column(name = "last_executed_at")
     private LocalDateTime lastExecutedAt;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "last_execution_status", length = 20)
+    private RoutineExecutionStatus lastExecutionStatus;
+
+    @Column(name = "last_execution_message", length = 255)
+    private String lastExecutionMessage;
+
     public void toggle() {
         this.enabled = this.enabled == null || !this.enabled;
     }
@@ -79,6 +86,16 @@ public class Routine extends AuditableEntity {
         if (getEffectiveRepeatType() == RoutineRepeatType.ONCE) {
             this.enabled = false;
         }
+    }
+
+    /**
+     * Registra el resultado de la ejecucion de la ocurrencia programada. La ocurrencia queda
+     * marcada como ejecutada aunque no se haya aplicado, para no reintentarla cada minuto.
+     */
+    public void recordExecution(RoutineExecutionStatus status, String message, LocalDateTime executedAt) {
+        this.lastExecutionStatus = status;
+        this.lastExecutionMessage = message;
+        markExecutedAt(executedAt);
     }
 
     public RoutineRepeatType getEffectiveRepeatType() {

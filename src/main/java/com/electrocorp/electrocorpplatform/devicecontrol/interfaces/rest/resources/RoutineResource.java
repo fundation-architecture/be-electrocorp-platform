@@ -26,7 +26,9 @@ public record RoutineResource(
         Integer blockedDeviceCount,
         Boolean enabled,
         String timeZone,
-        String lastExecutedAt
+        String lastExecutedAt,
+        String lastExecutionStatus,
+        String lastExecutionMessage
 ) {
     public static RoutineResource from(
             Routine routine,
@@ -53,7 +55,9 @@ public record RoutineResource(
                 blockedDeviceCount,
                 routine.getEnabled(),
                 ZoneId.systemDefault().getId(),
-                routine.getLastExecutedAt() == null ? null : routine.getLastExecutedAt().toString()
+                routine.getLastExecutedAt() == null ? null : routine.getLastExecutedAt().toString(),
+                routine.getLastExecutionStatus() == null ? null : routine.getLastExecutionStatus().name(),
+                routine.getLastExecutionMessage()
         );
     }
 

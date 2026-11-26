@@ -13,6 +13,7 @@ import com.electrocorp.electrocorpplatform.devicecontrol.application.facades.Dev
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.DeviceStatus;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.OperationModeStatus;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.RoutineAction;
+import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.RoutineExecutionStatus;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.RoutineRepeatType;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.aggregates.Routine;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.events.DeviceCreatedEvent;
@@ -489,15 +490,15 @@ public class DeviceControlApplicationService {
 
     @Transactional
     public RoutineDetails executeRoutine(Long userId, Long routineId) {
-        return executeRoutineInternal(userId, routineId, LocalDateTime.now());
+        return executeRoutineInternal(userId, routineId, LocalDateTime.now(), false);
     }
 
     @Transactional
     public RoutineDetails executeScheduledRoutine(Long userId, Long routineId, LocalDateTime executedAt) {
-        return executeRoutineInternal(userId, routineId, executedAt != null ? executedAt : LocalDateTime.now());
+        return executeRoutineInternal(userId, routineId, executedAt != null ? executedAt : LocalDateTime.now(), true);
     }
 
-    private RoutineDetails executeRoutineInternal(Long userId, Long routineId, LocalDateTime executedAt) {
+    private RoutineDetails executeRoutineInternal(Long userId, Long routineId, LocalDateTime executedAt, boolean scheduled) {
         Routine routine = routineRepository.findByIdAndUserId(routineId, userId)
                 .orElseThrow(() -> new IllegalArgumentException("Routine not found."));
 
@@ -505,13 +506,23 @@ public class DeviceControlApplicationService {
             throw new IllegalArgumentException("Inactive routines cannot be executed.");
         }
 
-        List<Device> applicableDevices = getRoutineScopedDevices(routine)
+        List<Device> scopedDevices = getRoutineScopedDevices(routine);
+        List<Device> applicableDevices = scopedDevices
                 .stream()
                 .filter(Device::canReceiveOperationalChanges)
                 .toList();
 
         if (applicableDevices.isEmpty()) {
-            throw new IllegalArgumentException("Routine has no applicable devices.");
+            if (!scheduled) {
+                throw new IllegalArgumentException("Routine has no applicable devices.");
+            }
+
+            routine.recordExecution(
+                    RoutineExecutionStatus.NOT_APPLIED,
+                    "Ningun dispositivo pudo recibir el comando (mantenimiento, retirado o sin dispositivos).",
+                    executedAt
+            );
+            return toRoutineDetails(routineRepository.save(routine));
         }
 
         applicableDevices.forEach(device -> {
@@ -527,7 +538,13 @@ public class DeviceControlApplicationService {
             energyReadingRecorderService.recordStatusTransition(DeviceSnapshot.from(savedDevice), previousStatus == DeviceStatus.ON);
         });
 
-        routine.markExecutedAt(executedAt);
+        int blockedDevices = scopedDevices.size() - applicableDevices.size();
+        routine.recordExecution(
+                blockedDevices == 0 ? RoutineExecutionStatus.EXECUTED : RoutineExecutionStatus.PARTIAL,
+                "Comando %s aplicado a %d de %d dispositivos.".formatted(
+                        routine.getAction(), applicableDevices.size(), scopedDevices.size()),
+                executedAt
+        );
         Routine savedRoutine = routineRepository.save(routine);
 
         return toRoutineDetails(savedRoutine);
