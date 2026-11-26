@@ -26,6 +26,8 @@ import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.RoutineTar
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.services.DevicePairingCatalogService;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.services.DevicePolicyService;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.services.RoutineSchedulePolicyService;
+import com.electrocorp.electrocorpplatform.devicecontrol.domain.services.RoutineConflictCheckerService;
+import com.electrocorp.electrocorpplatform.shared.domain.exceptions.ConflictException;
 import com.electrocorp.electrocorpplatform.energymonitoring.application.services.EnergyReadingRecorderService;
 import com.electrocorp.electrocorpplatform.notifications.domain.repositories.AlertRuleProfileRepository;
 import com.electrocorp.electrocorpplatform.notifications.domain.repositories.NotificationPreferenceRepository;
@@ -71,6 +73,7 @@ public class DeviceControlApplicationService {
     private final DevicePairingCatalogService devicePairingCatalogService;
     private final DevicePolicyService devicePolicyService;
     private final RoutineSchedulePolicyService routineSchedulePolicyService;
+    private final RoutineConflictCheckerService routineConflictCheckerService;
 
     @Transactional(readOnly = true)
     public List<Device> getDevices(Long userId) {
@@ -454,6 +457,10 @@ public class DeviceControlApplicationService {
                 : 1);
         routine.setStartsOn(command.startsOn() != null ? command.startsOn().trim() : null);
         routine.setEnabled(true);
+
+        if (routineConflictCheckerService.hasConflict(routineRepository.findByUserId(command.userId()), routine)) {
+            throw new ConflictException("A routine with the same target, time and action already exists.");
+        }
 
         Routine savedRoutine = routineRepository.save(routine);
 

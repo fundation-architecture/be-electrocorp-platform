@@ -4,6 +4,7 @@ import com.electrocorp.electrocorpplatform.devicecontrol.domain.model.aggregates
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Objects;
 
 @Service
 public class RoutineConflictCheckerService {
@@ -16,8 +17,8 @@ public class RoutineConflictCheckerService {
         return routines.stream()
                 .anyMatch(existing ->
                         existing.getTargetType() == candidate.getTargetType()
-                                && existing.getTargetId().equals(candidate.getTargetId())
-                                && existing.getTime().equals(candidate.getTime())
+                                && Objects.equals(existing.getTargetId(), candidate.getTargetId())
+                                && Objects.equals(existing.getTime(), candidate.getTime())
                                 && existing.getAction() == candidate.getAction()
                 );
     }
