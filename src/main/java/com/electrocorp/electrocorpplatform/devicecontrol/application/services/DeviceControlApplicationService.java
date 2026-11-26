@@ -29,6 +29,7 @@ import com.electrocorp.electrocorpplatform.devicecontrol.domain.services.DeviceP
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.services.RoutineSchedulePolicyService;
 import com.electrocorp.electrocorpplatform.devicecontrol.domain.services.RoutineConflictCheckerService;
 import com.electrocorp.electrocorpplatform.shared.domain.exceptions.ConflictException;
+import com.electrocorp.electrocorpplatform.shared.domain.exceptions.ResourceNotFoundException;
 import com.electrocorp.electrocorpplatform.energymonitoring.application.services.EnergyReadingRecorderService;
 import com.electrocorp.electrocorpplatform.notifications.domain.repositories.AlertRuleProfileRepository;
 import com.electrocorp.electrocorpplatform.notifications.domain.repositories.NotificationPreferenceRepository;
@@ -466,6 +467,45 @@ public class DeviceControlApplicationService {
         Routine savedRoutine = routineRepository.save(routine);
 
         return toRoutineDetails(savedRoutine);
+    }
+
+    /**
+     * Modifica el horario, la accion o la repeticion de una programacion del usuario (US-12).
+     * Una programacion de otro usuario se trata como inexistente.
+     */
+    @Transactional
+    public RoutineDetails updateRoutine(UpdateRoutineCommand command) {
+        Routine routine = routineRepository.findByIdAndUserId(command.routineId(), command.userId())
+                .orElseThrow(() -> new ResourceNotFoundException("Routine not found."));
+
+        String time = command.time() != null ? command.time().trim() : routine.getTime();
+        RoutineRepeatType repeatType = command.repeatType() != null ? command.repeatType() : routine.getEffectiveRepeatType();
+        String daysOfWeek = command.daysOfWeek() != null ? command.daysOfWeek().trim() : routine.getDaysOfWeek();
+        Integer intervalDays = command.intervalDays() != null ? command.intervalDays() : routine.getEffectiveIntervalDays();
+        String startsOn = command.startsOn() != null ? command.startsOn().trim() : routine.getStartsOn();
+
+        routineSchedulePolicyService.validateSchedule(time, repeatType, daysOfWeek, intervalDays, startsOn);
+
+        if (command.name() != null && !command.name().isBlank()) {
+            routine.setName(command.name().trim());
+        }
+        if (command.action() != null) {
+            routine.setAction(command.action());
+        }
+        routine.setTime(time);
+        routine.setRepeatType(repeatType);
+        routine.setDaysOfWeek(repeatType == RoutineRepeatType.WEEKLY && daysOfWeek != null ? daysOfWeek : "");
+        routine.setIntervalDays(repeatType == RoutineRepeatType.CUSTOM_INTERVAL ? intervalDays : 1);
+        routine.setStartsOn(startsOn);
+
+        List<Routine> otherRoutines = routineRepository.findByUserId(command.userId()).stream()
+                .filter(existing -> !existing.getId().equals(routine.getId()))
+                .toList();
+        if (routineConflictCheckerService.hasConflict(otherRoutines, routine)) {
+            throw new ConflictException("A routine with the same target, time and action already exists.");
+        }
+
+        return toRoutineDetails(routineRepository.save(routine));
     }
 
     @Transactional
